@@ -23,6 +23,7 @@ dependencies:
   geolocator: ^4.0.3
   flutter_email_sender: ^4.0.0
   mapbox_gl: ^0.9.0
+  location: ^3.2.4
 
 dev_dependencies:
   flutter_test:
