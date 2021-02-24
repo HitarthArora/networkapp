@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:networkapp/chat.dart';
 import 'package:networkapp/const.dart';
 import 'package:networkapp/settings.dart';
+import 'package:networkapp/map.dart';
+import 'package:networkapp/map/main.dart';
 import 'package:networkapp/widget/loading.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -156,7 +158,7 @@ class HomeScreenState extends State<HomeScreen> {
           context,
           MaterialPageRoute(
               builder: (context) =>
-                  ChatSettings(x: x)));
+                  MapsDemo()));
 
     }
   }
