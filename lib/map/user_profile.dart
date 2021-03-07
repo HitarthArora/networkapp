@@ -11,54 +11,63 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_xlider/flutter_xlider.dart';
 
-class ChatSettings extends StatelessWidget {
+class UserProfile extends StatelessWidget {
   var x;
-
-  ChatSettings({Key key, this.x})
+  var data;
+  UserProfile({Key key, this.x, this.data})
       : super(key: key);
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'SETTINGS',
+          'USER PROFILE',
           style: TextStyle(
               color: primaryColor,
               fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
-      body: SettingsScreen(x: x),
+      body: SettingsScreen(x: x, data: data),
     );
   }
 }
 
 class SettingsScreen extends StatefulWidget {
   var x;
-
-  SettingsScreen({Key key, this.x})
+  var data;
+  SettingsScreen({Key key, this.x, this.data})
       : super(key: key);
   @override
   State createState() =>
-      SettingsScreenState(x: x);
+      SettingsScreenState(x: x, data: data);
 }
 
 class SettingsScreenState
     extends State<SettingsScreen> {
   var x;
-
-  SettingsScreenState({Key key, this.x});
+  var data;
+  SettingsScreenState(
+      {Key key, this.x, this.data});
 
   TextEditingController controllerNickname;
   TextEditingController controllerAboutMe;
   TextEditingController controllerRadius;
+  TextEditingController controllerLatitude;
+  TextEditingController controllerLongitude;
+  TextEditingController controllerEmail;
+  TextEditingController controllerDistance;
 
   SharedPreferences prefs;
 
   String id = '';
   String nickname = '';
   String aboutMe = '';
+  String email = '';
   String photoUrl = '';
+  var latitude;
+  var longitude;
+  var distance;
   int radius = 10000000000;
   double _currentSliderValue = 0;
   double _lowerValue = 0;
@@ -79,9 +88,16 @@ class SettingsScreenState
   void readLocal() async {
     prefs = await SharedPreferences.getInstance();
     id = prefs.getString('id') ?? '';
-    nickname = prefs.getString('nickname') ?? '';
-    aboutMe = prefs.getString('aboutMe') ?? '';
-    photoUrl = prefs.getString('photoUrl') ?? '';
+    nickname = data != null ? data['name'] : '';
+    aboutMe = data != null ? data['aboutMe'] : '';
+    photoUrl =
+        data != null ? data['photoUrl'] : '';
+    latitude =
+        data != null ? data['latitude'] : '';
+    longitude =
+        data != null ? data['longitude'] : '';
+        distance= data != null ? data['distance'] : '';
+    email = data != null ? data['email'] : '';
     radius = prefs.getInt('radius') ?? '';
     _currentSliderValue =
         prefs.getInt('radius').toDouble() ?? 0;
@@ -94,6 +110,17 @@ class SettingsScreenState
         TextEditingController(text: aboutMe);
     controllerRadius =
         new TextEditingController();
+    controllerLatitude =
+        new TextEditingController(
+            text: latitude.toString());
+    controllerLongitude =
+        new TextEditingController(
+            text: longitude.toString());
+    controllerDistance =
+        new TextEditingController(
+            text: distance.toString() +" km");
+    controllerEmail =
+        new TextEditingController(text: email);
 
     // Force refresh input
     setState(() {});
@@ -288,20 +315,6 @@ class SettingsScreenState
                               clipBehavior:
                                   Clip.hardEdge,
                             ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.camera_alt,
-                          color: primaryColor
-                              .withOpacity(0.5),
-                        ),
-                        onPressed: getImage,
-                        padding:
-                            EdgeInsets.all(30.0),
-                        splashColor:
-                            Colors.transparent,
-                        highlightColor: greyColor,
-                        iconSize: 30.0,
-                      ),
                     ],
                   ),
                 ),
@@ -335,6 +348,7 @@ class SettingsScreenState
                               primaryColor:
                                   primaryColor),
                       child: TextField(
+                        enabled: false,
                         decoration:
                             InputDecoration(
                           hintText: 'Sweetie',
@@ -379,6 +393,7 @@ class SettingsScreenState
                               primaryColor:
                                   primaryColor),
                       child: TextField(
+                        enabled: false,
                         decoration:
                             InputDecoration(
                           hintText:
@@ -401,66 +416,187 @@ class SettingsScreenState
                         left: 30.0, right: 30.0),
                   ),
 
-                  // Radius
+                  // Email
                   Container(
-                      child: Text(
-                        'Radius',
-                        style: TextStyle(
-                            fontStyle:
-                                FontStyle.italic,
-                            fontWeight:
-                                FontWeight.bold,
-                            color: primaryColor),
-                      ),
-                      margin: EdgeInsets.only(
-                          left: 10.0,
-                          top: 30.0,
-                          bottom: 5.0),
-                      padding: EdgeInsets.only(
-                          bottom: 5.0)),
+                    child: Text(
+                      'Email',
+                      style: TextStyle(
+                          fontStyle:
+                              FontStyle.italic,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: primaryColor),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 10.0,
+                        top: 30.0,
+                        bottom: 5.0),
+                  ),
                   Container(
                     child: Theme(
-                        data: Theme.of(context)
-                            .copyWith(
-                                primaryColor:
-                                    primaryColor),
-                        child: FlutterSlider(
-                          values: [_lowerValue],
-                          max: 10,
-                          min: 0,
-                          tooltip:
-                              FlutterSliderTooltip(
-                            leftPrefix: Icon(
-                              Icons.attach_money,
-                              size: 19,
-                              color:
-                                  Colors.black45,
-                            ),
-                            rightSuffix:
-                                Text(" kms"),
-                            textStyle: TextStyle(
-                                fontSize: 17,
-                                color: Colors
-                                    .black45),
-                          ),
-                          handler: customHandler(
-                              Icons.flag_rounded),
-                          onDragging:
-                              (handlerIndex,
-                                  lowerValue,
-                                  upperValue) {
-                            _lowerValue =
-                                lowerValue;
-                            radius = lowerValue
-                                .round()
-                                .toInt();
-                            setState(() {});
-                          },
-                        )),
+                      data: Theme.of(context)
+                          .copyWith(
+                              primaryColor:
+                                  primaryColor),
+                      child: TextField(
+                        enabled: false,
+                        decoration:
+                            InputDecoration(
+                          hintText:
+                              'example@gmail.com',
+                          contentPadding:
+                              EdgeInsets.all(5.0),
+                          hintStyle: TextStyle(
+                              color: greyColor),
+                        ),
+                        controller:
+                            controllerEmail,
+                        onChanged: (value) {
+                          aboutMe = value;
+                        },
+                        focusNode:
+                            focusNodeAboutMe,
+                      ),
+                    ),
                     margin: EdgeInsets.only(
-                        left: 15.0,
-                        right: 15.0,
-                        top: 0.0),
+                        left: 30.0, right: 30.0),
+                  ),
+
+                  /*
+                  //Latitude
+                  Container(
+                    child: Text(
+                      'Latitude',
+                      style: TextStyle(
+                          fontStyle:
+                              FontStyle.italic,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: primaryColor),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 10.0,
+                        top: 30.0,
+                        bottom: 5.0),
+                  ),
+                  Container(
+                    child: Theme(
+                      data: Theme.of(context)
+                          .copyWith(
+                              primaryColor:
+                                  primaryColor),
+                      child: TextField(
+                        enabled: false,
+                        decoration:
+                            InputDecoration(
+                          hintText: 'latitude',
+                          contentPadding:
+                              EdgeInsets.all(5.0),
+                          hintStyle: TextStyle(
+                              color: greyColor),
+                        ),
+                        controller:
+                            controllerLatitude,
+                        onChanged: (value) {
+                          aboutMe = value;
+                        },
+                        focusNode:
+                            focusNodeAboutMe,
+                      ),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 30.0, right: 30.0),
+                  ),
+
+                  //Longitude
+                  Container(
+                    child: Text(
+                      'Longitude',
+                      style: TextStyle(
+                          fontStyle:
+                              FontStyle.italic,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: primaryColor),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 10.0,
+                        top: 30.0,
+                        bottom: 5.0),
+                  ),
+                  Container(
+                    child: Theme(
+                      data: Theme.of(context)
+                          .copyWith(
+                              primaryColor:
+                                  primaryColor),
+                      child: TextField(
+                        enabled: false,
+                        decoration:
+                            InputDecoration(
+                          hintText: 'longitude',
+                          contentPadding:
+                              EdgeInsets.all(5.0),
+                          hintStyle: TextStyle(
+                              color: greyColor),
+                        ),
+                        controller:
+                            controllerLongitude,
+                        onChanged: (value) {
+                          aboutMe = value;
+                        },
+                        focusNode:
+                            focusNodeAboutMe,
+                      ),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 30.0, right: 30.0),
+                  ),
+                  */
+
+                  //Distance
+                  Container(
+                    child: Text(
+                      'Distance',
+                      style: TextStyle(
+                          fontStyle:
+                              FontStyle.italic,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: primaryColor),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 10.0,
+                        top: 30.0,
+                        bottom: 5.0),
+                  ),
+                  Container(
+                    child: Theme(
+                      data: Theme.of(context)
+                          .copyWith(
+                              primaryColor:
+                                  primaryColor),
+                      child: TextField(
+                        enabled: false,
+                        decoration:
+                            InputDecoration(
+                          hintText: '0.70km',
+                          contentPadding:
+                              EdgeInsets.all(5.0),
+                          hintStyle: TextStyle(
+                              color: greyColor),
+                        ),
+                        controller:
+                            controllerDistance,
+                        onChanged: (value) {
+                          aboutMe = value;
+                        },
+                        focusNode:
+                            focusNodeAboutMe,
+                      ),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 30.0, right: 30.0),
                   ),
                 ],
                 crossAxisAlignment:
@@ -469,21 +605,7 @@ class SettingsScreenState
 
               // Button
               Container(
-                child: FlatButton(
-                  onPressed: handleUpdateData,
-                  child: Text(
-                    'UPDATE',
-                    style:
-                        TextStyle(fontSize: 16.0),
-                  ),
-                  color: primaryColor,
-                  highlightColor:
-                      Color(0xff8d93a0),
-                  splashColor: Colors.transparent,
-                  textColor: Colors.white,
-                  padding: EdgeInsets.fromLTRB(
-                      30.0, 10.0, 30.0, 10.0),
-                ),
+                child: Text(''),
                 margin: EdgeInsets.only(
                     top: 50.0, bottom: 50.0),
               ),
@@ -515,212 +637,14 @@ class SettingsScreenState
 
   customHandler(IconData icon) {
     return FlutterSliderHandler(
-        decoration: BoxDecoration(),
         child: Container(
-          padding:
-              const EdgeInsets.only(bottom: 60.0),
-          child: Container(
-            child: Icon(
-              icon,
-              color: Colors.red,
-              size: 38,
-            ),
-          ),
-        ));
+      child: Container(
+        child: Icon(
+          icon,
+          color: Colors.red,
+          size: 38,
+        ),
+      ),
+    ));
   }
 }
-
-/*
-SliderTheme(
-data: SliderTheme.of(
-        context)
-    .copyWith(
-  activeTrackColor:
-      Colors.red[700],
-  inactiveTrackColor:
-      Colors.red[100],
-  trackShape:
-      RoundedRectSliderTrackShape(),
-  trackHeight: 4.0,
-  thumbShape:
-      RoundSliderThumbShape(
-          enabledThumbRadius:
-              12.0),
-  thumbColor:
-      Colors.redAccent,
-  overlayColor: Colors
-      .red
-      .withAlpha(32),
-  overlayShape:
-      RoundSliderOverlayShape(
-          overlayRadius:
-              28.0),
-  tickMarkShape:
-      RoundSliderTickMarkShape(),
-  activeTickMarkColor:
-      Colors.red[700],
-  inactiveTickMarkColor:
-      Colors.red[100],
-  valueIndicatorShape:
-      PaddleSliderValueIndicatorShape(),
-  valueIndicatorColor:
-      Colors.redAccent,
-  valueIndicatorTextStyle:
-      TextStyle(
-    color: Colors.white,
-  ),
-),
-child: Slider(
-  value:
-      _currentSliderValue,
-  min: 0,
-  max: 10,
-  divisions: 5,
-  label: _currentSliderValue
-          .round()
-          .toString() +
-      " kms",
-  onChanged:
-      (double value) {
-    setState(() {
-      _currentSliderValue =
-          value;
-    });
-    radius = value
-        .round()
-        .toInt();
-  },
-)),
-*/
-
-/*
-SliderTheme(
-data: SliderTheme.of(
-        context)
-    .copyWith(
-  activeTrackColor:
-      Colors.red[700],
-  inactiveTrackColor:
-      Colors.red[100],
-  trackShape:
-      RectangularSliderTrackShape(),
-  trackHeight: 4.0,
-  thumbColor: Colors
-      .redAccent,
-  thumbShape:
-      RoundSliderThumbShape(
-          enabledThumbRadius:
-              12.0),
-  overlayColor: Colors
-      .red
-      .withAlpha(32),
-  overlayShape:
-      RoundSliderOverlayShape(
-          overlayRadius:
-              28.0),
-),
-child: Slider(
-  value:
-      _currentSliderValue,
-  min: 0,
-  max: 10,
-  divisions: 5,
-  label: _currentSliderValue
-          .round()
-          .toString() +
-      "kms",
-  onChanged:
-      (double value) {
-    setState(() {
-      _currentSliderValue =
-          value;
-    });
-    radius = value
-        .round()
-        .toInt();
-  },
-))
-*/
-
-/*
-FlutterSlider(
-  values: [_lowerValue],
-  max: 200,
-  min: 50,
-  maximumDistance: 300,
-  step: FlutterSliderStep(step: 100),
-  jump: true,
-  trackBar:
-      FlutterSliderTrackBar(
-    inactiveTrackBarHeight:
-        2,
-    activeTrackBarHeight: 3,
-  ),
-
-  disabled: false,
-
-  handler: customHandler(
-      Icons.chevron_right),
-  rightHandler:
-      customHandler(Icons
-          .chevron_left),
-  tooltip:
-      FlutterSliderTooltip(
-    leftPrefix: Icon(
-      Icons.attach_money,
-      size: 19,
-      color: Colors.black45,
-    ),
-    rightSuffix:
-        Text(" kms"),
-    textStyle: TextStyle(
-        fontSize: 17,
-        color:
-            Colors.black45),
-  ),
-  fixedValues: [
-    FlutterSliderFixedValue(
-        percent: 0,
-        value: 0.0),
-    FlutterSliderFixedValue(
-        percent: 10,
-        value: 1.0),
-    FlutterSliderFixedValue(
-        percent: 20,
-        value: 2.0),
-    FlutterSliderFixedValue(
-        percent: 30,
-        value: 3.0),
-    FlutterSliderFixedValue(
-        percent: 40,
-        value: 4.0),
-    FlutterSliderFixedValue(
-        percent: 50,
-        value: 5.0),
-    FlutterSliderFixedValue(
-        percent: 60,
-        value: 6.0),
-    FlutterSliderFixedValue(
-        percent: 70,
-        value: 7.0),
-    FlutterSliderFixedValue(
-        percent: 80,
-        value: 8.0),
-    FlutterSliderFixedValue(
-        percent: 90,
-        value: 9.0),
-    FlutterSliderFixedValue(
-        percent: 100,
-        value: 10.0),
-  ],
-  onDragging: (handlerIndex,
-      lowerValue,
-      upperValue) {
-    _lowerValue =
-        lowerValue;
-    radius = lowerValue.round()
-              .toInt();
-    setState(() {});
-  },
-)
-*/

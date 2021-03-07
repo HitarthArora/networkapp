@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geoflutterfire/geoflutterfire.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:networkapp/map/user_profile.dart';
 
 import 'main.dart';
 import 'page.dart';
@@ -33,6 +34,7 @@ class FullMapState extends State<FullMap> {
   SharedPreferences prefs;
   var radius;
   String userId;
+  List<Map<String, dynamic>> userList = [];
 
   Future readLocal() async {
     prefs = await SharedPreferences.getInstance();
@@ -107,12 +109,14 @@ class FullMapState extends State<FullMap> {
                   .data()['position']['geopoint']
                   .longitude),
           iconImage: "airport-15",
-          textField: userId == document
-                  .data()['id'] ? document.data()['nickname'] +
-              " (Me)" : document.data()['nickname'] +
-              " (" +
-              dis.toString() +
-              " km away)",
+          textField:
+              userId == document.data()['id']
+                  ? document.data()['nickname'] +
+                      " (Me)"
+                  : document.data()['nickname'] +
+                      " (" +
+                      dis.toString() +
+                      " km away)",
           textSize: 12.5,
           textOffset: Offset(0, 0.8),
           textAnchor: 'top',
@@ -125,6 +129,20 @@ class FullMapState extends State<FullMap> {
             'Arial Unicode MS Regular'
           ],
         ));
+        Map<String, dynamic> myObject = {
+          'latitude': document
+              .data()['position']['geopoint']
+              .latitude,
+          'longitude': document
+              .data()['position']['geopoint']
+              .longitude,
+          'name': document.data()['nickname'],
+          'photoUrl': document.data()['photoUrl'],
+          'email': document.data()['email'],
+          'aboutMe': document.data()['aboutMe'],
+          'distance':dis,
+        };
+        userList.add(myObject);
       });
     });
   }
@@ -133,13 +151,62 @@ class FullMapState extends State<FullMap> {
   Widget build(BuildContext context) {
     return new Scaffold(
         body: MapboxMap(
-      accessToken: MapsDemo.ACCESS_TOKEN,
-      onMapCreated: _onMapCreated,
-      initialCameraPosition: const CameraPosition(
-          target: LatLng(24.6424302, 77.3052066)),
-      onStyleLoadedCallback:
-          onStyleLoadedCallback,
-    ));
+            accessToken: MapsDemo.ACCESS_TOKEN,
+            onMapCreated: _onMapCreated,
+            initialCameraPosition:
+                const CameraPosition(
+                    target: LatLng(
+                        24.6424302, 77.3052066)),
+            onStyleLoadedCallback:
+                onStyleLoadedCallback,
+            onMapClick: (point, latLng) async {
+              var data = userList.where((user) =>
+                  ((user["latitude"] -
+                              latLng.latitude)
+                          .abs() <=
+                      0.00005));
+              if (data.length >= 1) {
+                var dataLong = userList.where(
+                    (user) => ((user[
+                                    "longitude"] -
+                                latLng.longitude)
+                            .abs() <=
+                        0.00005));
+                if (dataLong.length >= 1) {
+                  var dataList =
+                      dataLong.toList();
+                  double min = 1000000.0;
+                  var finalData;
+                  print(dataList);
+                  for (var i = 0;
+                      i < dataList.length;
+                      i++) {
+                    if (min >
+                        ((dataList[i]
+                                    ["latitude"] -
+                                latLng.latitude)
+                            .abs())) {
+                      min = ((dataList[i]
+                                  ["latitude"] -
+                              latLng.latitude)
+                          .abs());
+                      finalData = dataList[i];
+                    }
+                  }
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) =>
+                              UserProfile(
+                                  data: finalData !=
+                                          null
+                                      ? finalData
+                                      : dataLong
+                                              .toList()[
+                                          0])));
+                }
+              }
+            }));
   }
 
   void onStyleLoadedCallback() {}

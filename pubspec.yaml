@@ -24,6 +24,7 @@ dependencies:
   flutter_email_sender: ^4.0.0
   mapbox_gl: ^0.10.0
   location: ^3.2.4
+  flutter_xlider: ^3.4.0
 
 dev_dependencies:
   flutter_test:

@@ -20,6 +20,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:geoflutterfire/geoflutterfire.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'main.dart';
 
@@ -56,6 +57,7 @@ class HomeScreenState extends State<HomeScreen> {
   final position;
   var radius;
   final email;
+  Position pos;
 
   SharedPreferences prefs;
 
@@ -75,8 +77,7 @@ class HomeScreenState extends State<HomeScreen> {
     const Choice(
         title: 'Settings', icon: Icons.settings),
     const Choice(
-        title: 'Map',
-        icon: Icons.exit_to_app),
+        title: 'Map', icon: Icons.map),
     const Choice(
         title: 'Log out',
         icon: Icons.exit_to_app),
@@ -149,17 +150,14 @@ class HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(
               builder: (context) =>
                   ChatSettings(x: x)));
-    }
-    else {
-     setState(() {
+    } else {
+      setState(() {
         data = 2;
       });
       Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (context) =>
-                  MapsDemo()));
-
+              builder: (context) => MapsDemo()));
     }
   }
 
@@ -330,6 +328,8 @@ class HomeScreenState extends State<HomeScreen> {
   void readLocal() async {
     prefs = await SharedPreferences.getInstance();
     radius = prefs.getInt('radius') ?? radius;
+    pos = await Geolocator().getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
   }
 
   @override
@@ -337,8 +337,9 @@ class HomeScreenState extends State<HomeScreen> {
     readLocal();
 
     GeoFirePoint center = geo.point(
-        latitude: position!=null ? position.latitude : 34,
-        longitude: position!=null ? position.longitude : 34);
+        latitude: pos != null ? pos.latitude : 34,
+        longitude:
+            pos != null ? pos.longitude : 34);
 
     var collectionReference =
         _firestore.collection('users');
@@ -404,7 +405,9 @@ class HomeScreenState extends State<HomeScreen> {
                             collectionReference)
                     .within(
                         center: center,
-                        radius: radius !=null ? radius.toDouble(): 100000000,
+                        radius: radius != null
+                            ? radius.toDouble()
+                            : 100000000,
                         field: field),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
