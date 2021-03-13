@@ -13,6 +13,7 @@ import 'package:networkapp/const.dart';
 import 'package:networkapp/settings.dart';
 import 'package:networkapp/map.dart';
 import 'package:networkapp/map/main.dart';
+import 'package:networkapp/voip/video/src/pages/call.dart';
 import 'package:networkapp/widget/loading.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -21,6 +22,9 @@ import 'package:geoflutterfire/geoflutterfire.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:intl/intl.dart';
 
 import 'main.dart';
 
@@ -45,7 +49,8 @@ class HomeScreen extends StatefulWidget {
       email: email);
 }
 
-class HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen>
+    with WidgetsBindingObserver {
   HomeScreenState(
       {Key key,
       @required this.currentUserId,
@@ -55,6 +60,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   final String currentUserId;
   final position;
+  String username;
   var radius;
   final email;
   Position pos;
@@ -70,14 +76,18 @@ class HomeScreenState extends State<HomeScreen> {
       GoogleSignIn();
   final geo = Geoflutterfire();
   final _firestore = FirebaseFirestore.instance;
+
   var data;
   var x = 2;
+  var notificationMessage;
+  var channelIdVOIP;
+
   bool isLoading = false;
+
   List<Choice> choices = const <Choice>[
     const Choice(
         title: 'Settings', icon: Icons.settings),
-    const Choice(
-        title: 'Map', icon: Icons.map),
+    const Choice(title: 'Map', icon: Icons.map),
     const Choice(
         title: 'Log out',
         icon: Icons.exit_to_app),
@@ -89,6 +99,37 @@ class HomeScreenState extends State<HomeScreen> {
     readLocal();
     registerNotification();
     configLocalNotification();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(
+      AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update({'status': 'online'});
+    } else {
+      DateTime now = DateTime.now();
+      DateFormat formatter =
+          DateFormat('dd-MM-yyyy');
+      String formatted = formatter.format(now);
+      var currentTime =
+          DateFormat.jm().format(DateTime.now());
+      var obj = {
+        "dateTime": now,
+        "date": formatted,
+        "time": currentTime,
+      };
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update({
+        'status': 'offline',
+        'lastSeen': obj
+      });
+    }
   }
 
   void registerNotification() {
@@ -98,11 +139,16 @@ class HomeScreenState extends State<HomeScreen> {
     firebaseMessaging.configure(onMessage:
         (Map<String, dynamic> message) {
       print('onMessage: $message');
+      notificationMessage = message;
+      channelIdVOIP =
+          message['data']['channelId'];
       Platform.isAndroid
           ? showNotification(
-              message['notification'])
+              message['notification'],
+              message['data']['channelId'])
           : showNotification(
-              message['aps']['alert']);
+              message['aps']['alert'],
+              message['data']['channelId']);
       return;
     }, onResume: (Map<String, dynamic> message) {
       print('onResume: $message');
@@ -161,7 +207,8 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void showNotification(message) async {
+  void showNotification(
+      message, channelId) async {
     var androidPlatformChannelSpecifics =
         new AndroidNotificationDetails(
       Platform.isAndroid
@@ -180,10 +227,58 @@ class HomeScreenState extends State<HomeScreen> {
         new NotificationDetails(
             androidPlatformChannelSpecifics,
             iOSPlatformChannelSpecifics);
+    var isNavigationDone = false;
 
     print(message);
-//    print(message['body'].toString());
-//    print(json.encode(message));
+
+    if (message['title'].toString() ==
+        "Channel Invitation") {
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title:
+              Text(message['title'].toString()),
+          content:
+              Text(message['body'].toString()),
+          actions: <Widget>[
+            FlatButton(
+              onPressed: () {
+                Navigator.pop(context);
+                isNavigationDone = true;
+              },
+              child: const Text('Cancel'),
+            ),
+            FlatButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                isNavigationDone = true;
+
+                await _handleCameraAndMic(
+                    Permission.camera);
+
+                await _handleCameraAndMic(
+                    Permission.microphone);
+
+                Fluttertoast.showToast(
+                    msg: channelId.toString());
+
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        CallPage(
+                      channelName:
+                          channelId.toString(),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Join'),
+            )
+          ],
+        ),
+      );
+    }
 
     await flutterLocalNotificationsPlugin.show(
         0,
@@ -191,6 +286,29 @@ class HomeScreenState extends State<HomeScreen> {
         message['body'].toString(),
         platformChannelSpecifics,
         payload: json.encode(message));
+
+    if (!isNavigationDone &&
+        message['title'].toString() ==
+            "Channel Invitation") {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CallPage(
+            channelName: channelId.toString(),
+          ),
+        ),
+      );
+    }
+//    print(message['body'].toString());
+//    print(json.encode(message));
+/*
+    await flutterLocalNotificationsPlugin.show(
+        0,
+        message['title'].toString(),
+        message['body'].toString(),
+        platformChannelSpecifics,
+        payload: json.encode(message));
+*/
 
 //    await flutterLocalNotificationsPlugin.show(
 //        0, 'plain title', 'plain body', platformChannelSpecifics,
@@ -306,10 +424,21 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _handleCameraAndMic(
+      Permission permission) async {
+    final status = await permission.request();
+    print(status);
+  }
+
   Future<Null> handleSignOut() async {
     this.setState(() {
       isLoading = true;
     });
+
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .update({'status': 'offline'});
 
     await FirebaseAuth.instance.signOut();
     await googleSignIn.disconnect();
@@ -330,6 +459,59 @@ class HomeScreenState extends State<HomeScreen> {
     radius = prefs.getInt('radius') ?? radius;
     pos = await Geolocator().getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
+    username = prefs.getString('nickname');
+  }
+
+  Future<void> sendNotification(
+      receiver, msg) async {
+    var token = await getToken(receiver);
+    print('receiver id: $receiver');
+    print('token : $token');
+
+    final data = jsonEncode({
+      "notification": {
+        "body": msg,
+        "title": "Chat Invitation"
+      },
+      "priority": "high",
+      "data": {
+        "click_action":
+            "FLUTTER_NOTIFICATION_CLICK",
+        "id": "1",
+        "status": "done"
+      },
+      "to": "$token"
+    });
+
+    try {
+      await http.post(
+        Uri.parse(
+            "https://fcm.googleapis.com/fcm/send"),
+        headers: <String, String>{
+          'content-type': 'application/json',
+          'Authorization':
+              'key=AAAABKJiMQo:APA91bGkKzaM07yF2FTfTIrKALQajayZuutRguc1gxvkWZDd19p-xI0VYt9G0lQR3maypMb9Nt_1t4VmtKTKZ66ISl-ZHmvOd2CrtjfzvEeMNg_Mk9XqbRT5ECZbiiBULQuYuAKCM8z0'
+        },
+        body: data,
+      );
+      print('FCM request for device sent!');
+    } catch (e) {
+      print('error: $e');
+    }
+  }
+
+  static Future<String> getToken(userId) async {
+    final FirebaseFirestore _db =
+        FirebaseFirestore.instance;
+    var token;
+    await _db
+        .collection('users')
+        .doc(userId)
+        .get()
+        .then((document) {
+      token = document.data()['pushToken'];
+    });
+    return token;
   }
 
   @override
@@ -354,6 +536,32 @@ class HomeScreenState extends State<HomeScreen> {
         data = json.decode(value);
       });
     });
+
+    /*
+    if (notificationMessage != null) {
+      Fluttertoast.showToast(msg: 'heml0oooooo');
+      if (notificationMessage['title']
+              .toString() ==
+          "Channel Invitation") {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CallPage(
+              channelName:
+                  channelIdVOIP.toString(),
+            ),
+          ),
+        );
+        notificationMessage = null;
+        Fluttertoast.showToast(msg: 'hemlo');
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) =>
+                    ChatSettings(x: x)));
+      }
+    }
+    */
 
     return Scaffold(
       appBar: AppBar(
@@ -460,42 +668,56 @@ class HomeScreenState extends State<HomeScreen> {
         child: FlatButton(
           child: Row(
             children: <Widget>[
-              Material(
-                child: document
-                            .data()['photoUrl'] !=
-                        null
-                    ? CachedNetworkImage(
-                        placeholder:
-                            (context, url) =>
-                                Container(
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth: 1.0,
-                            valueColor:
-                                AlwaysStoppedAnimation<
-                                        Color>(
-                                    themeColor),
+              Stack(children: <Widget>[
+                Material(
+                  child: document.data()[
+                              'photoUrl'] !=
+                          null
+                      ? CachedNetworkImage(
+                          placeholder:
+                              (context, url) =>
+                                  Container(
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 1.0,
+                              valueColor:
+                                  AlwaysStoppedAnimation<
+                                          Color>(
+                                      themeColor),
+                            ),
+                            width: 50.0,
+                            height: 50.0,
+                            padding:
+                                EdgeInsets.all(
+                                    15.0),
                           ),
+                          imageUrl: document
+                              .data()['photoUrl'],
                           width: 50.0,
                           height: 50.0,
-                          padding: EdgeInsets.all(
-                              15.0),
+                          fit: BoxFit.cover,
+                        )
+                      : Icon(
+                          Icons.account_circle,
+                          size: 50.0,
+                          color: greyColor,
                         ),
-                        imageUrl: document
-                            .data()['photoUrl'],
-                        width: 50.0,
-                        height: 50.0,
-                        fit: BoxFit.cover,
-                      )
-                    : Icon(
-                        Icons.account_circle,
-                        size: 50.0,
-                        color: greyColor,
-                      ),
-                borderRadius: BorderRadius.all(
-                    Radius.circular(25.0)),
-                clipBehavior: Clip.hardEdge,
-              ),
+                  borderRadius: BorderRadius.all(
+                      Radius.circular(25.0)),
+                  clipBehavior: Clip.hardEdge,
+                ),
+                new Positioned(
+                  right: 0.0,
+                  bottom: 0.0,
+                  child: new Icon(Icons.circle,
+                      size: 14,
+                      color: document.data()[
+                                  'status'] ==
+                              "online"
+                          ? Colors.green
+                          : Colors.black54),
+                ),
+              ]),
               Flexible(
                 child: Container(
                   child: Column(
@@ -541,6 +763,20 @@ class HomeScreenState extends State<HomeScreen> {
             ],
           ),
           onPressed: () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => Chat(
+                        peerId: document.id,
+                        peerAvatar: document
+                            .data()['photoUrl'],
+                        emailId: document
+                            .data()['email'],
+                        peerName: document
+                            .data()['nickname'],
+                        peerStatus: document
+                            .data()['status'])));
+
             final Email email = Email(
               body:
                   'Inviting you to chat on the Network App',
@@ -551,14 +787,15 @@ class HomeScreenState extends State<HomeScreen> {
               isHTML: false,
             );
             FlutterEmailSender.send(email);
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => Chat(
-                          peerId: document.id,
-                          peerAvatar: document
-                              .data()['photoUrl'],
-                        )));
+
+            sendNotification(
+                document.id,
+                username != null
+                    ? username +
+                        " is inviting you to chat"
+                    : "User is inviting you to chat");
+            prefs.setString('peerAvatar',
+                document.data()['photoUrl']);
           },
           color: greyColor2,
           padding: EdgeInsets.fromLTRB(

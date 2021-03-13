@@ -25,6 +25,9 @@ dependencies:
   mapbox_gl: ^0.10.0
   location: ^3.2.4
   flutter_xlider: ^3.4.0
+  agora_rtc_engine: ^3.2.1
+  permission_handler: ^5.0.1
+  http: ^0.12.2
 
 dev_dependencies:
   flutter_test:

@@ -76,6 +76,7 @@ class LoginScreenState
 
     GoogleSignInAccount googleUser =
         await googleSignIn.signIn();
+
     GoogleSignInAuthentication googleAuth =
         await googleUser.authentication;
 
@@ -93,10 +94,9 @@ class LoginScreenState
         .getCurrentPosition(
             desiredAccuracy:
                 LocationAccuracy.high);
-  
-    print(position);
 
     final geo = Geoflutterfire();
+
     GeoFirePoint myLocation = geo.point(
         latitude: position.latitude,
         longitude: position.longitude);
@@ -111,6 +111,7 @@ class LoginScreenState
               .get();
       final List<DocumentSnapshot> documents =
           result.docs;
+
       if (documents.length == 0) {
         // Update data to server if new user
         FirebaseFirestore.instance
@@ -120,15 +121,15 @@ class LoginScreenState
           'nickname': firebaseUser.displayName,
           'photoUrl': firebaseUser.photoURL,
           'id': firebaseUser.uid,
-          'email':firebaseUser.email,
+          'email': firebaseUser.email,
           'createdAt': DateTime.now()
               .millisecondsSinceEpoch
               .toString(),
           'chattingWith': null,
           'position': myLocation.data,
-          'radius': 100000000000000,
+          'radius': 10,
         });
-        radius = 100000000000000;
+        radius = 10;
         // Write data to local
         currentUser = firebaseUser;
         await prefs.setString(
@@ -138,7 +139,7 @@ class LoginScreenState
         await prefs.setString(
             'photoUrl', currentUser.photoURL);
         await prefs.setInt(
-            'radius', 100000000000000);
+            'radius', 10);
         await prefs.setString(
             'email', currentUser.email);
       } else {
@@ -159,23 +160,31 @@ class LoginScreenState
             documents[0].data()['aboutMe']);
         await prefs.setInt('radius',
             documents[0].data()['radius']);
-        await prefs.setInt('email',
+        await prefs.setString('email',
             documents[0].data()['email']);
-        radius=documents[0].data()['radius'];
+        radius = documents[0].data()['radius'];
       }
-      Fluttertoast.showToast(
-          msg: "Sign in success");
-      this.setState(() {
-        isLoading = false;
-      });
 
       Navigator.push(
           context,
           MaterialPageRoute(
               builder: (context) => HomeScreen(
                   currentUserId: firebaseUser.uid,
-                  position: position,radius:radius,
-                  email:firebaseUser.email)));
+                  position: position,
+                  radius: radius,
+                  email: firebaseUser.email)));
+
+      Fluttertoast.showToast(
+          msg: "Sign in success");
+
+      this.setState(() {
+        isLoading = false;
+      });
+
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .update({'status': 'online'});
     } else {
       Fluttertoast.showToast(msg: "Sign in fail");
       this.setState(() {
