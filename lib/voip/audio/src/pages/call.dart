@@ -1,31 +1,40 @@
 import 'dart:async';
 
 import 'package:agora_rtc_engine/rtc_engine.dart';
-import 'package:agora_rtc_engine/rtc_local_view.dart' as RtcLocalView;
-import 'package:agora_rtc_engine/rtc_remote_view.dart' as RtcRemoteView;
+import 'package:agora_rtc_engine/rtc_local_view.dart'
+    as RtcLocalView;
+import 'package:agora_rtc_engine/rtc_remote_view.dart'
+    as RtcRemoteView;
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../utils/settings.dart';
 
-class CallPage extends StatefulWidget {
-  /// non-modifiable channel name of the page
-  final String channelName;
-
-  /// non-modifiable client role of the page
+class CallPageAudio extends StatefulWidget {
+ final String channelName;
+  final String peerId;
   final ClientRole role;
 
-  /// Creates a call page with given channel name.
-  const CallPage({Key key, this.channelName, this.role}) : super(key: key);
+  CallPageAudio (
+      {Key key,
+      this.channelName,
+      this.role,
+      this.peerId})
+      : super(key: key);
 
   @override
-  _CallPageState createState() => _CallPageState();
+  _CallPageState createState() =>
+      _CallPageState(peerId: peerId);
 }
 
-class _CallPageState extends State<CallPage> {
+class _CallPageState extends State<CallPageAudio> {
   final _users = <int>[];
   final _infoStrings = <String>[];
   bool muted = false;
   RtcEngine _engine;
+  String peerId;
+
+  _CallPageState({Key key, this.peerId});
 
   @override
   void dispose() {
@@ -50,38 +59,51 @@ class _CallPageState extends State<CallPage> {
         _infoStrings.add(
           'APP_ID missing, please provide your APP_ID in settings.dart',
         );
-        _infoStrings.add('Agora Engine is not starting');
+        _infoStrings
+            .add('Agora Engine is not starting');
       });
       return;
     }
 
     await _initAgoraRtcEngine();
     _addAgoraEventHandlers();
-    await _engine.enableWebSdkInteroperability(true);
-    VideoEncoderConfiguration configuration = VideoEncoderConfiguration();
-    configuration.dimensions = VideoDimensions(1920, 1080);
-    await _engine.setVideoEncoderConfiguration(configuration);
-    await _engine.joinChannel(Token, widget.channelName, null, 0);
+    await _engine
+        .enableWebSdkInteroperability(true);
+    VideoEncoderConfiguration configuration =
+        VideoEncoderConfiguration();
+    configuration.dimensions =
+        VideoDimensions(1920, 1080);
+    await _engine.setVideoEncoderConfiguration(
+        configuration);
+    await _engine.joinChannel(
+        Token, widget.channelName, null, 0);
   }
 
   /// Create agora sdk instance and initialize
   Future<void> _initAgoraRtcEngine() async {
     _engine = await RtcEngine.create(APP_ID);
     await _engine.disableVideo();
-    await _engine.setChannelProfile(ChannelProfile.LiveBroadcasting);
-    await _engine.setClientRole(widget.role);
+    await _engine.setChannelProfile(
+        ChannelProfile.LiveBroadcasting);
+    await _engine.setClientRole(
+        widget.role != null
+            ? widget.role
+            : ClientRole.Broadcaster);
   }
 
   /// Add agora event handlers
   void _addAgoraEventHandlers() {
-    _engine.setEventHandler(RtcEngineEventHandler(error: (code) {
+    _engine.setEventHandler(RtcEngineEventHandler(
+        error: (code) {
       setState(() {
         final info = 'onError: $code';
         _infoStrings.add(info);
       });
-    }, joinChannelSuccess: (channel, uid, elapsed) {
+    }, joinChannelSuccess:
+            (channel, uid, elapsed) {
       setState(() {
-        final info = 'onJoinChannel: $channel, uid: $uid';
+        final info =
+            'onJoinChannel: $channel, uid: $uid';
         _infoStrings.add(info);
       });
     }, leaveChannel: (stats) {
@@ -101,9 +123,11 @@ class _CallPageState extends State<CallPage> {
         _infoStrings.add(info);
         _users.remove(uid);
       });
-    }, firstRemoteVideoFrame: (uid, width, height, elapsed) {
+    }, firstRemoteVideoFrame:
+            (uid, width, height, elapsed) {
       setState(() {
-        final info = 'firstRemoteVideo: $uid ${width}x $height';
+        final info =
+            'firstRemoteVideo: $uid ${width}x $height';
         _infoStrings.add(info);
       });
     }));
@@ -112,21 +136,24 @@ class _CallPageState extends State<CallPage> {
   /// Helper function to get list of native views
   List<Widget> _getRenderViews() {
     final List<StatefulWidget> list = [];
-    if (widget.role == ClientRole.Broadcaster) {
-      list.add(RtcLocalView.SurfaceView());
-    }
-    _users.forEach((int uid) => list.add(RtcRemoteView.SurfaceView(uid: uid)));
+    //if (widget.role == ClientRole.Broadcaster) {
+    list.add(RtcLocalView.SurfaceView());
+    //}
+    _users.forEach((int uid) => list.add(
+        RtcRemoteView.SurfaceView(uid: uid)));
     return list;
   }
 
   /// Video view wrapper
   Widget _videoView(view) {
-    return Expanded(child: Container(child: view));
+    return Expanded(
+        child: Container(child: view));
   }
 
   /// Video view row wrapper
   Widget _expandedVideoRow(List<Widget> views) {
-    final wrappedViews = views.map<Widget>(_videoView).toList();
+    final wrappedViews =
+        views.map<Widget>(_videoView).toList();
     return Expanded(
       child: Row(
         children: wrappedViews,
@@ -141,7 +168,9 @@ class _CallPageState extends State<CallPage> {
       case 1:
         return Container(
             child: Column(
-          children: <Widget>[_videoView(views[0])],
+          children: <Widget>[
+            _videoView(views[0])
+          ],
         ));
       case 2:
         return Container(
@@ -155,7 +184,8 @@ class _CallPageState extends State<CallPage> {
         return Container(
             child: Column(
           children: <Widget>[
-            _expandedVideoRow(views.sublist(0, 2)),
+            _expandedVideoRow(
+                views.sublist(0, 2)),
             _expandedVideoRow(views.sublist(2, 3))
           ],
         ));
@@ -163,7 +193,8 @@ class _CallPageState extends State<CallPage> {
         return Container(
             child: Column(
           children: <Widget>[
-            _expandedVideoRow(views.sublist(0, 2)),
+            _expandedVideoRow(
+                views.sublist(0, 2)),
             _expandedVideoRow(views.sublist(2, 4))
           ],
         ));
@@ -174,23 +205,30 @@ class _CallPageState extends State<CallPage> {
 
   /// Toolbar layout
   Widget _toolbar() {
-    if (widget.role == ClientRole.Audience) return Container();
+    //if (widget.role == ClientRole.Audience)
+    // return Container();
     return Container(
       alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.symmetric(vertical: 48),
+      padding: const EdgeInsets.symmetric(
+          vertical: 48),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment:
+            MainAxisAlignment.center,
         children: <Widget>[
           RawMaterialButton(
             onPressed: _onToggleMute,
             child: Icon(
               muted ? Icons.mic_off : Icons.mic,
-              color: muted ? Colors.white : Colors.blueAccent,
+              color: muted
+                  ? Colors.white
+                  : Colors.blueAccent,
               size: 20.0,
             ),
             shape: CircleBorder(),
             elevation: 2.0,
-            fillColor: muted ? Colors.blueAccent : Colors.white,
+            fillColor: muted
+                ? Colors.blueAccent
+                : Colors.white,
             padding: const EdgeInsets.all(12.0),
           ),
           RawMaterialButton(
@@ -204,11 +242,11 @@ class _CallPageState extends State<CallPage> {
             elevation: 2.0,
             fillColor: Colors.redAccent,
             padding: const EdgeInsets.all(15.0),
-          ), 
-          RawMaterialButton(
-            onPressed: _onPress,
-            child: Text(''),
           ),
+          RawMaterialButton(
+            onPressed: _onPressDoNothing,
+            child: Text('')
+          )
         ],
       ),
     );
@@ -217,21 +255,25 @@ class _CallPageState extends State<CallPage> {
   /// Info panel to show logs
   Widget _panel() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 55),
+      padding: const EdgeInsets.symmetric(
+          vertical: 55),
       alignment: Alignment.bottomCenter,
       child: FractionallySizedBox(
         heightFactor: 0.5,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 55),
+          padding: const EdgeInsets.symmetric(
+              vertical: 55),
           child: ListView.builder(
             reverse: true,
             itemCount: _infoStrings.length,
-            itemBuilder: (BuildContext context, int index) {
+            itemBuilder: (BuildContext context,
+                int index) {
               if (_infoStrings.isEmpty) {
                 return null;
               }
               return Padding(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                    const EdgeInsets.symmetric(
                   vertical: 3,
                   horizontal: 10,
                 ),
@@ -240,17 +282,23 @@ class _CallPageState extends State<CallPage> {
                   children: [
                     Flexible(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: const EdgeInsets
+                            .symmetric(
                           vertical: 2,
                           horizontal: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.yellowAccent,
-                          borderRadius: BorderRadius.circular(5),
+                          color:
+                              Colors.yellowAccent,
+                          borderRadius:
+                              BorderRadius
+                                  .circular(5),
                         ),
                         child: Text(
                           _infoStrings[index],
-                          style: TextStyle(color: Colors.blueGrey),
+                          style: TextStyle(
+                              color: Colors
+                                  .blueGrey),
                         ),
                       ),
                     )
@@ -264,8 +312,15 @@ class _CallPageState extends State<CallPage> {
     );
   }
 
-  void _onCallEnd(BuildContext context) {
+  void _onCallEnd(BuildContext context) async{
     Navigator.pop(context);
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(peerId)
+        .update({
+      'channelInvitationSounds':
+          null
+    });
   }
 
   void _onToggleMute() {
@@ -279,8 +334,8 @@ class _CallPageState extends State<CallPage> {
     _engine.switchCamera();
   }
 
-  void _onPress() {
-    
+  void _onPressDoNothing() {
+   
   }
 
   @override
@@ -295,7 +350,6 @@ class _CallPageState extends State<CallPage> {
         child: Stack(
           children: <Widget>[
             _viewRows(),
-            _panel(),
             _toolbar(),
           ],
         ),

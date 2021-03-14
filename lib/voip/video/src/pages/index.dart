@@ -9,10 +9,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import './call.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class IndexPage extends StatefulWidget {
   final String emailId;
@@ -214,7 +210,7 @@ class IndexState extends State<IndexPage> {
     final data = jsonEncode({
       "notification": {
         "body": msg,
-        "title": "Channel Invitation",  
+        "title": "Video Channel Invitation",
       },
       "priority": "high",
       "data": {
@@ -222,10 +218,17 @@ class IndexState extends State<IndexPage> {
             "FLUTTER_NOTIFICATION_CLICK",
         "id": "1",
         "status": "done",
+        "body": msg,
+        "title": "Video Channel Invitation",
         "channelId": _channelController.text,
       },
       "to": "$token",
       "channelId": _channelController.text,
+      "apns": {
+        "payload": {
+          "aps": {"sound": "default"}
+        }
+      },
     });
 
     try {
@@ -278,11 +281,10 @@ class IndexState extends State<IndexPage> {
         final Email email = Email(
           body:
               "Inviting you to join the video channel",
-          subject: 'Video Conference Invitation',
+          subject: 'Video Channel Invitation',
           recipients: [emailId],
           isHTML: false,
         );
-
         await FlutterEmailSender.send(email);
       }
 
@@ -292,12 +294,25 @@ class IndexState extends State<IndexPage> {
       await _handleCameraAndMic(
           Permission.microphone);
 
+      var invitationSoundObj = {
+        'playSound': true,
+        'startTime': DateTime.now(),
+      };
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(peerId)
+          .update({
+        'channelInvitationSounds':
+            invitationSoundObj
+      });
+
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => CallPage(
-            channelName: _channelController.text,
-          ),
+          builder: (context) => CallPageVideo(
+              channelName:
+                  _channelController.text,
+              peerId: peerId),
         ),
       );
     }

@@ -14,7 +14,7 @@ class VoiceCall extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Video Call',
+          'Voice Call',
           style: TextStyle(
               color: primaryColor,
               fontWeight: FontWeight.bold),

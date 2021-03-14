@@ -6,31 +6,36 @@ import 'package:agora_rtc_engine/rtc_local_view.dart'
 import 'package:agora_rtc_engine/rtc_remote_view.dart'
     as RtcRemoteView;
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../utils/settings.dart';
 
-class CallPage extends StatefulWidget {
-  /// non-modifiable channel name of the page
+class CallPageVideo extends StatefulWidget {
   final String channelName;
-
-  /// non-modifiable client role of the page
+  final String peerId;
   final ClientRole role;
 
-  /// Creates a call page with given channel name.
-  const CallPage(
-      {Key key, this.channelName, this.role})
+  CallPageVideo(
+      {Key key,
+      this.channelName,
+      this.role,
+      this.peerId})
       : super(key: key);
 
   @override
   _CallPageState createState() =>
-      _CallPageState();
+      _CallPageState(peerId: peerId);
 }
 
-class _CallPageState extends State<CallPage> {
+class _CallPageState
+    extends State<CallPageVideo> {
   final _users = <int>[];
   final _infoStrings = <String>[];
   bool muted = false;
   RtcEngine _engine;
+  String peerId;
+
+  _CallPageState({Key key, this.peerId});
 
   @override
   void dispose() {
@@ -316,8 +321,15 @@ class _CallPageState extends State<CallPage> {
     );
   }
 
-  void _onCallEnd(BuildContext context) {
+  void _onCallEnd(BuildContext context) async {
     Navigator.pop(context);
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(peerId)
+        .update({
+      'channelInvitationSounds':
+          null
+    });
   }
 
   void _onToggleMute() {

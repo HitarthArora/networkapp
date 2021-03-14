@@ -11,9 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:networkapp/chat.dart';
 import 'package:networkapp/const.dart';
 import 'package:networkapp/settings.dart';
-import 'package:networkapp/map.dart';
 import 'package:networkapp/map/main.dart';
 import 'package:networkapp/voip/video/src/pages/call.dart';
+import 'package:networkapp/voip/audio/src/pages/call.dart';
 import 'package:networkapp/widget/loading.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -25,6 +25,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
 import 'main.dart';
 
@@ -79,7 +80,8 @@ class HomeScreenState extends State<HomeScreen>
 
   var data;
   var x = 2;
-  var notificationMessage;
+  var notificationTitle;
+  var notificationMsg;
   var channelIdVOIP;
 
   bool isLoading = false;
@@ -93,6 +95,9 @@ class HomeScreenState extends State<HomeScreen>
         icon: Icons.exit_to_app),
   ];
 
+  Timer timer;
+  bool isRingtonePlaying = false;
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +105,10 @@ class HomeScreenState extends State<HomeScreen>
     registerNotification();
     configLocalNotification();
     WidgetsBinding.instance.addObserver(this);
+    timer = Timer.periodic(Duration(seconds: 1),
+        (Timer t) => checkForBackgroundCalls());
+    //BackgroundFetch.registerHeadlessTask(
+    //    backgroundFetchHeadlessTask);
   }
 
   @override
@@ -132,6 +141,124 @@ class HomeScreenState extends State<HomeScreen>
     }
   }
 
+  checkForBackgroundCalls() async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get()
+        .then((document) async {
+      if (document.data()[
+              'channelInvitationSounds'] !=
+          null) {
+        if (document.data()[
+                    'channelInvitationSounds']
+                ['playSound'] !=
+            null) {
+          if (document.data()[
+                  'channelInvitationSounds']
+              ['playSound']) {
+            var dateTime = new DateTime
+                    .fromMicrosecondsSinceEpoch(
+                document
+                    .data()[
+                        'channelInvitationSounds']
+                        ['startTime']
+                    .microsecondsSinceEpoch);
+            var date2 = DateTime.now();
+            var diff = date2
+                .difference(dateTime)
+                .inSeconds;
+            if (diff <= 15) {
+              if (!isRingtonePlaying) {
+                FlutterRingtonePlayer
+                    .playRingtone();
+                isRingtonePlaying = true;
+              }
+            } else {
+              FlutterRingtonePlayer.stop();
+              isRingtonePlaying = false;
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(currentUserId)
+                  .update({
+                'channelInvitationSounds': null
+              });
+            }
+          } else {
+            FlutterRingtonePlayer.stop();
+            isRingtonePlaying = false;
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUserId)
+                .update({
+              'channelInvitationSounds': null
+            });
+          }
+        } else {
+          FlutterRingtonePlayer.stop();
+          isRingtonePlaying = false;
+        }
+      } else {
+        FlutterRingtonePlayer.stop();
+        isRingtonePlaying = false;
+      }
+    });
+  }
+
+  /*
+  void backgroundFetchHeadlessTask(
+      HeadlessTask task) async {
+    print("yaaaaar");
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get()
+        .then((document) async {
+      if (document.data()[
+                  'channelInvitationSounds']
+              ['playSound'] !=
+          null) {
+        if (document
+                .data()['channelInvitationSounds']
+            ['playSound']) {
+          var dateTime = new DateTime
+                  .fromMicrosecondsSinceEpoch(
+              document
+                  .data()[
+                      'channelInvitationSounds']
+                      ['startTime']
+                  .microsecondsSinceEpoch);
+          var date2 = DateTime.now();
+          var diff = date2
+              .difference(dateTime)
+              .inSeconds;
+          if (diff <= 15) {
+            FlutterRingtonePlayer.playRingtone();
+          } else {
+            FlutterRingtonePlayer.stop();
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUserId)
+                .update({
+              'channelInvitationSounds': null
+            });
+          }
+        } else {
+          FlutterRingtonePlayer.stop();
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUserId)
+              .update({
+            'channelInvitationSounds': null
+          });
+        }
+      } else {
+        FlutterRingtonePlayer.stop();
+      }
+    });
+  }
+  */
+
   void registerNotification() {
     firebaseMessaging
         .requestNotificationPermissions();
@@ -139,9 +266,12 @@ class HomeScreenState extends State<HomeScreen>
     firebaseMessaging.configure(onMessage:
         (Map<String, dynamic> message) {
       print('onMessage: $message');
-      notificationMessage = message;
-      channelIdVOIP =
-          message['data']['channelId'];
+      FlutterRingtonePlayer.play(
+        android: AndroidSounds.notification,
+        ios: IosSounds.glass,
+        looping: true,
+        volume: 1.0,
+      );
       Platform.isAndroid
           ? showNotification(
               message['notification'],
@@ -149,12 +279,30 @@ class HomeScreenState extends State<HomeScreen>
           : showNotification(
               message['aps']['alert'],
               message['data']['channelId']);
+      showChannelInvitationDialog(message);
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update(
+              {'channelInvitationSounds': null});
       return;
     }, onResume: (Map<String, dynamic> message) {
       print('onResume: $message');
+      showChannelInvitationDialog(message);
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update(
+              {'channelInvitationSounds': null});
       return;
     }, onLaunch: (Map<String, dynamic> message) {
       print('onLaunch: $message');
+      showChannelInvitationDialog(message);
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update(
+              {'channelInvitationSounds': null});
       return;
     });
 
@@ -178,8 +326,9 @@ class HomeScreenState extends State<HomeScreen>
         new IOSInitializationSettings();
     var initializationSettings =
         new InitializationSettings(
-            initializationSettingsAndroid,
-            initializationSettingsIOS);
+            android:
+                initializationSettingsAndroid,
+            iOS: initializationSettingsIOS);
     flutterLocalNotificationsPlugin
         .initialize(initializationSettings);
   }
@@ -207,51 +356,24 @@ class HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void showNotification(
-      message, channelId) async {
-    var androidPlatformChannelSpecifics =
-        new AndroidNotificationDetails(
-      Platform.isAndroid
-          ? 'com.example.networkapp'
-          : 'com.example.networkapp',
-      'Networkapp',
-      'Connecting users',
-      playSound: true,
-      enableVibration: true,
-      importance: Importance.Max,
-      priority: Priority.High,
-    );
-    var iOSPlatformChannelSpecifics =
-        new IOSNotificationDetails();
-    var platformChannelSpecifics =
-        new NotificationDetails(
-            androidPlatformChannelSpecifics,
-            iOSPlatformChannelSpecifics);
-    var isNavigationDone = false;
-
-    print(message);
-
-    if (message['title'].toString() ==
-        "Channel Invitation") {
-      await showDialog(
+  showChannelInvitationDialog(message) async {
+    if (message['data']['title'].toString() ==
+        "Video Channel Invitation") {
+      showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title:
-              Text(message['title'].toString()),
-          content:
-              Text(message['body'].toString()),
+          title: Text(message['data']['title']),
+          content: Text(message['data']['body']),
           actions: <Widget>[
             FlatButton(
               onPressed: () {
                 Navigator.pop(context);
-                isNavigationDone = true;
               },
               child: const Text('Cancel'),
             ),
             FlatButton(
               onPressed: () async {
                 Navigator.pop(context);
-                isNavigationDone = true;
 
                 await _handleCameraAndMic(
                     Permission.camera);
@@ -259,19 +381,25 @@ class HomeScreenState extends State<HomeScreen>
                 await _handleCameraAndMic(
                     Permission.microphone);
 
-                Fluttertoast.showToast(
-                    msg: channelId.toString());
-
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
-                        CallPage(
-                      channelName:
-                          channelId.toString(),
+                        CallPageVideo(
+                      channelName: message['data']
+                              ['channelId']
+                          .toString(),
+                      peerId: message['data']
+                              ['channelId']
+                          .toString(),
                     ),
                   ),
                 );
+
+                Fluttertoast.showToast(
+                    msg: message['data']
+                            ['channelId']
+                        .toString());
               },
               child: const Text('Join'),
             )
@@ -280,25 +408,94 @@ class HomeScreenState extends State<HomeScreen>
       );
     }
 
-    await flutterLocalNotificationsPlugin.show(
-        0,
-        message['title'].toString(),
-        message['body'].toString(),
-        platformChannelSpecifics,
-        payload: json.encode(message));
+    if (message['data']['title'].toString() ==
+        "Voice Channel Invitation") {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(message['data']['title']),
+          content: Text(message['data']['body']),
+          actions: <Widget>[
+            FlatButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            FlatButton(
+              onPressed: () async {
+                Navigator.pop(context);
 
-    if (!isNavigationDone &&
-        message['title'].toString() ==
-            "Channel Invitation") {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => CallPage(
-            channelName: channelId.toString(),
-          ),
+                await _handleCameraAndMic(
+                    Permission.microphone);
+
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        CallPageAudio(
+                      channelName: message['data']
+                              ['channelId']
+                          .toString(),
+                      peerId: message['data']
+                              ['channelId']
+                          .toString(),
+                    ),
+                  ),
+                );
+
+                Fluttertoast.showToast(
+                    msg: message['data']
+                            ['channelId']
+                        .toString());
+              },
+              child: const Text('Join'),
+            )
+          ],
         ),
       );
     }
+  }
+
+  void showNotification(
+      message, channelId) async {
+    var androidPlatformChannelSpecifics =
+        new AndroidNotificationDetails(
+            Platform.isAndroid
+                ? 'com.example.networkapp'
+                : 'com.example.networkapp',
+            'Networkapp',
+            'Connecting users',
+            playSound: true,
+            enableVibration: true,
+            importance: Importance.max,
+            priority: Priority.high,
+            enableLights: true,
+            fullScreenIntent: true,
+            sound:
+                RawResourceAndroidNotificationSound(
+                    'slow_spring_board'),
+            showWhen: true,
+            ledColor: const Color.fromARGB(
+                255, 255, 0, 0),
+            ledOnMs: 1000,
+            ledOffMs: 5000);
+    var iOSPlatformChannelSpecifics =
+        new IOSNotificationDetails();
+    var platformChannelSpecifics =
+        new NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iOSPlatformChannelSpecifics,
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      message['title'].toString(),
+      message['body'].toString(),
+      platformChannelSpecifics,
+      payload: json.encode(message),
+    );
+
 //    print(message['body'].toString());
 //    print(json.encode(message));
 /*
@@ -460,6 +657,171 @@ class HomeScreenState extends State<HomeScreen>
     pos = await Geolocator().getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
     username = prefs.getString('nickname');
+
+    /*
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get()
+        .then((document) async {
+      if (document.data()[
+                  'channelInvitationSounds']
+              ['playSound'] !=
+          null) {
+        if (document
+                .data()['channelInvitationSounds']
+            ['playSound']) {
+          var dateTime = new DateTime
+                  .fromMicrosecondsSinceEpoch(
+              document
+                  .data()[
+                      'channelInvitationSounds']
+                      ['startTime']
+                  .microsecondsSinceEpoch);
+          var date2 = DateTime.now();
+          var diff = date2
+              .difference(dateTime)
+              .inSeconds;
+          if (diff <= 15) {
+            FlutterRingtonePlayer.playRingtone();
+          } else {
+            FlutterRingtonePlayer.stop();
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUserId)
+                .update({
+              'channelInvitationSounds': null
+            });
+          }
+        } else {
+          FlutterRingtonePlayer.stop();
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUserId)
+              .update({
+            'channelInvitationSounds': null
+          });
+        }
+      } else {
+        FlutterRingtonePlayer.stop();
+      }
+    });
+    */
+    /*
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get()
+        .then((document) {
+      notificationTitle = document
+          .data()['notification']['title'];
+      notificationMsg = document
+          .data()['notification']['message'];
+      channelIdVOIP = document
+          .data()['notification']['channelId'];
+    });
+    
+    if (notificationTitle ==
+        "Video Channel Invitation") {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update({'notification': null});
+
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(notificationTitle),
+          content: Text(notificationMsg),
+          actions: <Widget>[
+            FlatButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            FlatButton(
+              onPressed: () async {
+                Navigator.pop(context);
+
+                await _handleCameraAndMic(
+                    Permission.camera);
+
+                await _handleCameraAndMic(
+                    Permission.microphone);
+
+                Fluttertoast.showToast(
+                    msg:
+                        channelIdVOIP.toString());
+
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        CallPageVideo(
+                      channelName: channelIdVOIP
+                          .toString(),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Join'),
+            )
+          ],
+        ),
+      );
+      notificationTitle = null;
+    }
+
+    if (notificationTitle ==
+        "Voice Channel Invitation") {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .update({'notification': null});
+
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(notificationTitle),
+          content: Text(notificationMsg),
+          actions: <Widget>[
+            FlatButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            FlatButton(
+              onPressed: () async {
+                Navigator.pop(context);
+
+                await _handleCameraAndMic(
+                    Permission.microphone);
+
+                Fluttertoast.showToast(
+                    msg:
+                        channelIdVOIP.toString());
+
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        CallPageAudio(
+                      channelName: channelIdVOIP
+                          .toString(),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Join'),
+            )
+          ],
+        ),
+      );
+      notificationTitle = null;
+    }
+    */
   }
 
   Future<void> sendNotification(
@@ -536,32 +898,6 @@ class HomeScreenState extends State<HomeScreen>
         data = json.decode(value);
       });
     });
-
-    /*
-    if (notificationMessage != null) {
-      Fluttertoast.showToast(msg: 'heml0oooooo');
-      if (notificationMessage['title']
-              .toString() ==
-          "Channel Invitation") {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CallPage(
-              channelName:
-                  channelIdVOIP.toString(),
-            ),
-          ),
-        );
-        notificationMessage = null;
-        Fluttertoast.showToast(msg: 'hemlo');
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) =>
-                    ChatSettings(x: x)));
-      }
-    }
-    */
 
     return Scaffold(
       appBar: AppBar(

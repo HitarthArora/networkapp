@@ -9,10 +9,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import './call.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class IndexPage extends StatefulWidget {
   final String emailId;
@@ -54,6 +50,8 @@ class IndexState extends State<IndexPage> {
   void readLocal() async {
     prefs = await SharedPreferences.getInstance();
     username = prefs.getString('nickname');
+    _channelController.text =
+        prefs.getString('id');
   }
 
   @override
@@ -77,6 +75,7 @@ class IndexState extends State<IndexPage> {
                 children: <Widget>[
                   Expanded(
                       child: TextField(
+                    enabled: false,
                     controller:
                         _channelController,
                     decoration: InputDecoration(
@@ -96,8 +95,7 @@ class IndexState extends State<IndexPage> {
               Column(
                 children: [
                   ListTile(
-                    title: Text(ClientRole
-                        .Broadcaster.toString()),
+                    title: Text("Broadcaster"),
                     leading: Radio(
                       value:
                           ClientRole.Broadcaster,
@@ -106,13 +104,20 @@ class IndexState extends State<IndexPage> {
                           (ClientRole value) {
                         setState(() {
                           _role = value;
+                          if (_role ==
+                              ClientRole
+                                  .Broadcaster) {
+                            _channelController
+                                    .text =
+                                prefs.getString(
+                                    'id');
+                          }
                         });
                       },
                     ),
                   ),
                   ListTile(
-                    title: Text(ClientRole
-                        .Audience.toString()),
+                    title: Text("Audience"),
                     leading: Radio(
                       value: ClientRole.Audience,
                       groupValue: _role,
@@ -120,6 +125,12 @@ class IndexState extends State<IndexPage> {
                           (ClientRole value) {
                         setState(() {
                           _role = value;
+                          if (_role ==
+                              ClientRole
+                                  .Audience) {
+                            _channelController
+                                .text = peerId;
+                          }
                         });
                       },
                     ),
@@ -199,16 +210,25 @@ class IndexState extends State<IndexPage> {
     final data = jsonEncode({
       "notification": {
         "body": msg,
-        "title": "Channel Invitation"
+        "title": "Voice Channel Invitation",
       },
       "priority": "high",
       "data": {
         "click_action":
             "FLUTTER_NOTIFICATION_CLICK",
         "id": "1",
-        "status": "done"
+        "status": "done",
+        "body": msg,
+        "title": "Voice Channel Invitation",  
+        "channelId": _channelController.text,
       },
-      "to": "$token"
+      "to": "$token",
+      "channelId": _channelController.text,
+      "apns": {
+        "payload": {
+          "aps": {"sound": "default"}
+        }
+      },
     });
 
     try {
@@ -250,38 +270,47 @@ class IndexState extends State<IndexPage> {
           : _validateError = false;
     });
     if (_channelController.text.isNotEmpty) {
-      sendNotification(
-          peerId,
-          username != null
-              ? username +
-                  " is inviting you to join the voice channel : '" +
-                  _channelController.text +
-                  "'"
-              : "User is inviting you to join the voice channel : '" +
-                  _channelController.text +
-                  "'");
+      if (_role == ClientRole.Broadcaster) {
+        sendNotification(
+            peerId,
+            username != null
+                ? username +
+                    " is inviting you to join the voice channel"
+                : "User is inviting you to join the voice channel");
 
-      final Email email = Email(
-        body:
-            "Inviting you to join the voice channel : '" +
-                _channelController.text +
-                "'",
-        subject: 'Video Conference Invitation',
-        recipients: [emailId],
-        isHTML: false,
-      );
+        final Email email = Email(
+          body:
+              "Inviting you to join the voice channel",
+          subject: 'Voice Channel Invitation',
+          recipients: [emailId],
+          isHTML: false,
+        );
+        await FlutterEmailSender.send(email);
+      }
 
-      await FlutterEmailSender.send(email);
+      await _handleCameraAndMic(
+          Permission.camera);
 
       await _handleCameraAndMic(
           Permission.microphone);
 
+      var invitationSoundObj = {
+        'playSound': true,
+        'startTime': DateTime.now(),
+      };
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(peerId)
+          .update({
+        'channelInvitationSounds':
+            invitationSoundObj
+      });
+
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => CallPage(
+          builder: (context) => CallPageAudio(
             channelName: _channelController.text,
-            role: _role,
           ),
         ),
       );

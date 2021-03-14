@@ -57,6 +57,8 @@ class ChatS extends State<Chat> {
   var time;
   var lastSeenString;
   var data;
+  bool isTyping = false;
+  SharedPreferences prefs;
 
   ChatS(
       {Key key,
@@ -68,6 +70,11 @@ class ChatS extends State<Chat> {
 
   void initState() {
     super.initState();
+    readLocal();
+  }
+
+  readLocal() async {
+    prefs = await SharedPreferences.getInstance();
   }
 
   List<Choice> choices = <Choice>[
@@ -113,6 +120,16 @@ class ChatS extends State<Chat> {
       date = document.data()['lastSeen']['date'];
       time = document.data()['lastSeen']['time'];
       peerStatus = document.data()['status'];
+      if (document.data()['typingStatus']
+              ['typingTo'] ==
+          prefs.getString('id')) {
+        isTyping = document.data()['typingStatus']
+                    ['isTyping'] !=
+                null
+            ? document.data()['typingStatus']
+                ['isTyping']
+            : false;
+      }
     });
     date2 = DateTime.now();
     diff = date2.difference(dateTime).inDays;
@@ -214,8 +231,11 @@ class ChatS extends State<Chat> {
                           Container(
                               child: Text(
                             peerStatus == "online"
-                                ? "      " +
-                                    "online"
+                                ? isTyping
+                                    ? "      " +
+                                        "typing...."
+                                    : "      " +
+                                        "online"
                                 : lastSeenString !=
                                         null
                                     ? "      " +
@@ -319,6 +339,7 @@ class ChatScreenState extends State<ChatScreen> {
   bool isShowSticker;
   String imageUrl;
   var msgCount;
+  bool isComposing = false;
 
   final TextEditingController
       textEditingController =
@@ -1038,7 +1059,19 @@ class ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  typingStatusSave() async {
+    var typObject = {
+      "isTyping": isComposing,
+      "typingTo": peerId,
+    };
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(id)
+        .update({'typingStatus': typObject});
+  }
+
   Widget buildInput() {
+    typingStatusSave();
     return Container(
       child: Row(
         children: <Widget>[
@@ -1076,6 +1109,16 @@ class ChatScreenState extends State<ChatScreen> {
                   onSendMessage(
                       textEditingController.text,
                       0);
+                  setState(() {
+                    isComposing = false;
+                  });
+                },
+                onChanged: (String text) {
+                  setState(() {
+                    isComposing = text != null
+                        ? text.length > 0
+                        : false;
+                  });
                 },
                 style: TextStyle(
                     color: primaryColor,
