@@ -1,6 +1,9 @@
 name: networkapp
 description: This is the chat app by Flutter
 
+environment:
+  sdk: ">=2.10.0 <3.0.0"
+
 dependencies:
   flutter:
     sdk: flutter
@@ -29,6 +32,10 @@ dependencies:
   permission_handler: ^5.0.1
   http: ^0.12.2
   flutter_ringtone_player: ^2.0.0
+  agora_rtm: ^0.9.14
+  device_apps: ^1.3.0
+  stop_watch_timer:
+  device_info:
 
 dev_dependencies:
   flutter_test:

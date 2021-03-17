@@ -5,6 +5,7 @@ import 'package:geoflutterfire/geoflutterfire.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:networkapp/map/user_profile.dart';
+import 'package:http/http.dart' as http;
 
 import 'main.dart';
 import 'page.dart';
@@ -35,6 +36,13 @@ class FullMapState extends State<FullMap> {
   var radius;
   String userId;
   List<Map<String, dynamic>> userList = [];
+
+  Future<void> addImageFromUrl(
+      String name, Uri uri) async {
+    var response = await http.get(uri);
+    return mapController.addImage(
+        name, response.bodyBytes);
+  }
 
   Future readLocal() async {
     prefs = await SharedPreferences.getInstance();
@@ -88,6 +96,10 @@ class FullMapState extends State<FullMap> {
         (List<DocumentSnapshot> documentList) {
       documentList
           .forEach((DocumentSnapshot document) {
+        addImageFromUrl(
+            document.data()['id'],
+            Uri.parse(
+                document.data()['photoUrl']));
         double dis = calculateDistance(
             document
                 .data()['position']['geopoint']
@@ -108,7 +120,8 @@ class FullMapState extends State<FullMap> {
               document
                   .data()['position']['geopoint']
                   .longitude),
-          iconImage: "airport-15",
+          iconImage: document.data()['id'],
+          iconOffset: Offset(-13, -13),
           textField:
               userId == document.data()['id']
                   ? document.data()['nickname'] +
@@ -118,7 +131,7 @@ class FullMapState extends State<FullMap> {
                       dis.toString() +
                       " km away)",
           textSize: 12.5,
-          textOffset: Offset(0, 0.8),
+          textOffset: Offset(-1, 0.6),
           textAnchor: 'top',
           textColor: '#000000',
           textHaloBlur: 1,
@@ -129,6 +142,24 @@ class FullMapState extends State<FullMap> {
             'Arial Unicode MS Regular'
           ],
         ));
+        controller.addCircle(
+          CircleOptions(
+            geometry: LatLng(
+                document
+                    .data()['position']
+                        ['geopoint']
+                    .latitude,
+                document
+                    .data()['position']
+                        ['geopoint']
+                    .longitude),
+            circleColor:
+                document.data()['status'] ==
+                        "online"
+                    ? "#00FF00"
+                    : "#000000",
+          ),
+        );
         Map<String, dynamic> myObject = {
           'latitude': document
               .data()['position']['geopoint']
@@ -140,7 +171,8 @@ class FullMapState extends State<FullMap> {
           'photoUrl': document.data()['photoUrl'],
           'email': document.data()['email'],
           'aboutMe': document.data()['aboutMe'],
-          'distance':dis,
+          'status': document.data()['status'],
+          'distance': dis,
         };
         userList.add(myObject);
       });

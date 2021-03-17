@@ -5,8 +5,9 @@ import './src/pages/index.dart';
 class VoiceCall extends StatelessWidget {
   final String emailId;
   final String peerId;
+  final String peerAvatar;
 
-  VoiceCall({Key key, this.emailId, this.peerId})
+  VoiceCall({Key key, this.emailId, this.peerId, this.peerAvatar})
       : super(key: key);
 
   @override
@@ -22,7 +23,7 @@ class VoiceCall extends StatelessWidget {
         centerTitle: true,
       ),
       body: IndexPage(
-          emailId: emailId, peerId: peerId),
+          emailId: emailId, peerId: peerId,peerAvatar:peerAvatar),
     );
   }
 }

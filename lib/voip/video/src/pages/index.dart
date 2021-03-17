@@ -210,7 +210,7 @@ class IndexState extends State<IndexPage> {
     final data = jsonEncode({
       "notification": {
         "body": msg,
-        "title": "Video Channel Invitation",
+        "title": "Incoming video call",
       },
       "priority": "high",
       "data": {
@@ -219,8 +219,11 @@ class IndexState extends State<IndexPage> {
         "id": "1",
         "status": "done",
         "body": msg,
-        "title": "Video Channel Invitation",
+        "title": "Incoming video call",
         "channelId": _channelController.text,
+        "peerAvatar": prefs.getString('photoUrl'),
+        "peerName": prefs.getString('nickname'),
+        "timeout": 15000,
       },
       "to": "$token",
       "channelId": _channelController.text,
@@ -275,8 +278,8 @@ class IndexState extends State<IndexPage> {
             peerId,
             username != null
                 ? username +
-                    " is inviting you to join the video channel"
-                : "User is inviting you to join the video channel");
+                    " is video calling you"
+                : "User is video calling you");
 
         final Email email = Email(
           body:
@@ -285,7 +288,25 @@ class IndexState extends State<IndexPage> {
           recipients: [emailId],
           isHTML: false,
         );
-        await FlutterEmailSender.send(email);
+        //await FlutterEmailSender.send(email);
+
+        var invitationSoundObj = {
+          'playSound': true,
+          'startTime': DateTime.now(),
+          'peerId': prefs.getString('id'),
+          'peerAvatar':
+              prefs.getString('photoUrl'),
+          'peerName': prefs.getString('nickname'),
+          'peerEmail': prefs.getString('email'),
+          'type': 'video',
+        };
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(peerId)
+            .update({
+          'channelInvitationSounds':
+              invitationSoundObj
+        });
       }
 
       await _handleCameraAndMic(
@@ -294,25 +315,15 @@ class IndexState extends State<IndexPage> {
       await _handleCameraAndMic(
           Permission.microphone);
 
-      var invitationSoundObj = {
-        'playSound': true,
-        'startTime': DateTime.now(),
-      };
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(peerId)
-          .update({
-        'channelInvitationSounds':
-            invitationSoundObj
-      });
-
       await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => CallPageVideo(
               channelName:
                   _channelController.text,
-              peerId: peerId),
+              peerId: peerId,
+              joinWithVideo: true,
+              isReceiver: false),
         ),
       );
     }

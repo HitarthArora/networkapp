@@ -13,22 +13,34 @@ import './call.dart';
 class IndexPage extends StatefulWidget {
   final String emailId;
   final String peerId;
+  final String peerAvatar;
 
-  IndexPage({Key key, this.emailId, this.peerId})
+  IndexPage(
+      {Key key,
+      this.emailId,
+      this.peerId,
+      this.peerAvatar})
       : super(key: key);
 
   @override
   State<StatefulWidget> createState() =>
       IndexState(
-          emailId: emailId, peerId: peerId);
+          emailId: emailId,
+          peerId: peerId,
+          peerAvatar: peerAvatar);
 }
 
 class IndexState extends State<IndexPage> {
   final String emailId;
   final String peerId;
+  final String peerAvatar;
+  String selfAvatar;
 
   IndexState(
-      {Key key, this.emailId, this.peerId});
+      {Key key,
+      this.emailId,
+      this.peerId,
+      this.peerAvatar});
 
   /// create a channelController to retrieve text value
   final _channelController =
@@ -49,6 +61,13 @@ class IndexState extends State<IndexPage> {
 
   void readLocal() async {
     prefs = await SharedPreferences.getInstance();
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(prefs.getString('id'))
+        .get()
+        .then((document) {
+      selfAvatar = document.data()['photoUrl'];
+    });
     username = prefs.getString('nickname');
     _channelController.text =
         prefs.getString('id');
@@ -219,8 +238,11 @@ class IndexState extends State<IndexPage> {
         "id": "1",
         "status": "done",
         "body": msg,
-        "title": "Voice Channel Invitation",  
+        "title": "Voice Channel Invitation",
         "channelId": _channelController.text,
+        "peerAvatar": prefs.getString('photoUrl'),
+        "peerName": prefs.getString('nickname'),
+        "timeout": 15000,
       },
       "to": "$token",
       "channelId": _channelController.text,
@@ -285,7 +307,24 @@ class IndexState extends State<IndexPage> {
           recipients: [emailId],
           isHTML: false,
         );
-        await FlutterEmailSender.send(email);
+        //await FlutterEmailSender.send(email);
+
+        var invitationSoundObj = {
+          'playSound': true,
+          'startTime': DateTime.now(),
+          'peerId': prefs.getString('id'),
+          'peerAvatar':
+              prefs.getString('photoUrl'),
+          'peerName': prefs.getString('nickname'),
+          'type': 'voice',
+        };
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(peerId)
+            .update({
+          'channelInvitationSounds':
+              invitationSoundObj
+        });
       }
 
       await _handleCameraAndMic(
@@ -294,23 +333,14 @@ class IndexState extends State<IndexPage> {
       await _handleCameraAndMic(
           Permission.microphone);
 
-      var invitationSoundObj = {
-        'playSound': true,
-        'startTime': DateTime.now(),
-      };
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(peerId)
-          .update({
-        'channelInvitationSounds':
-            invitationSoundObj
-      });
-
       await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => CallPageAudio(
             channelName: _channelController.text,
+            peerAvatar: peerAvatar,
+            selfAvatar: selfAvatar,
+            isReceiver: false,
           ),
         ),
       );

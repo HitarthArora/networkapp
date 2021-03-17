@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:agora_rtc_engine/rtc_engine.dart';
 import 'package:agora_rtc_engine/rtc_local_view.dart'
@@ -7,6 +8,9 @@ import 'package:agora_rtc_engine/rtc_remote_view.dart'
     as RtcRemoteView;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:networkapp/home.dart';
 
 import '../utils/settings.dart';
 
@@ -14,17 +18,23 @@ class CallPageVideo extends StatefulWidget {
   final String channelName;
   final String peerId;
   final ClientRole role;
+  final bool joinWithVideo;
+  final bool isReceiver;
 
   CallPageVideo(
       {Key key,
       this.channelName,
       this.role,
-      this.peerId})
+      this.peerId,
+      this.joinWithVideo,
+      this.isReceiver})
       : super(key: key);
 
   @override
-  _CallPageState createState() =>
-      _CallPageState(peerId: peerId);
+  _CallPageState createState() => _CallPageState(
+      peerId: peerId,
+      joinWithVideo: joinWithVideo,
+      isReceiver: isReceiver);
 }
 
 class _CallPageState
@@ -34,8 +44,16 @@ class _CallPageState
   bool muted = false;
   RtcEngine _engine;
   String peerId;
+  bool joinWithVideo;
+  Timer _timer;
+  SharedPreferences prefs;
+  bool isReceiver;
 
-  _CallPageState({Key key, this.peerId});
+  _CallPageState(
+      {Key key,
+      this.peerId,
+      this.joinWithVideo,
+      this.isReceiver});
 
   @override
   void dispose() {
@@ -52,9 +70,86 @@ class _CallPageState
     super.initState();
     // initialize agora sdk
     initialize();
+    timerFunction();
+  }
+
+  timerFunction() {
+    _timer = new Timer(
+        const Duration(milliseconds: 15000), () {
+      setState(() {
+        sendNotification(peerId);
+      });
+    });
+  }
+
+  static Future<String> getToken(userId) async {
+    final FirebaseFirestore _db =
+        FirebaseFirestore.instance;
+    var token;
+    await _db
+        .collection('users')
+        .doc(userId)
+        .get()
+        .then((document) {
+      token = document.data()['pushToken'];
+    });
+    return token;
+  }
+
+  Future<void> sendNotification(receiver) async {
+    var token = await getToken(receiver);
+    print('receiver id: $peerId');
+    print('token : $token');
+
+    final data = jsonEncode({
+      "notification": {
+        "body":
+            "You have missed a video call from " +
+                prefs.getString('nickname'),
+        "title": "Missed Video Call",
+      },
+      "priority": "high",
+      "data": {
+        "click_action":
+            "FLUTTER_NOTIFICATION_CLICK",
+        "id": "1",
+        "status": "done",
+        "body":
+            "You have missed a video call from " +
+                prefs.getString('nickname'),
+        "title": "Missed Video Call",
+        "peerAvatar": prefs.getString('photoUrl'),
+        "peerName": prefs.getString('nickname'),
+        "timeout": null,
+      },
+      "to": "$token",
+      "apns": {
+        "payload": {
+          "aps": {"sound": "default"}
+        }
+      },
+    });
+
+    try {
+      await http.post(
+        Uri.parse(
+            "https://fcm.googleapis.com/fcm/send"),
+        headers: <String, String>{
+          'content-type': 'application/json',
+          'Authorization':
+              'key=AAAABKJiMQo:APA91bGkKzaM07yF2FTfTIrKALQajayZuutRguc1gxvkWZDd19p-xI0VYt9G0lQR3maypMb9Nt_1t4VmtKTKZ66ISl-ZHmvOd2CrtjfzvEeMNg_Mk9XqbRT5ECZbiiBULQuYuAKCM8z0'
+        },
+        body: data,
+      );
+      print('FCM request for device sent!');
+    } catch (e) {
+      print('error: $e');
+    }
+    _timer.cancel();
   }
 
   Future<void> initialize() async {
+    prefs = await SharedPreferences.getInstance();
     if (APP_ID.isEmpty) {
       setState(() {
         _infoStrings.add(
@@ -83,7 +178,15 @@ class _CallPageState
   /// Create agora sdk instance and initialize
   Future<void> _initAgoraRtcEngine() async {
     _engine = await RtcEngine.create(APP_ID);
-    await _engine.enableVideo();
+    if (joinWithVideo != null) {
+      if (joinWithVideo) {
+        await _engine.enableVideo();
+      } else {
+        await _engine.disableVideo();
+      }
+    } else {
+      await _engine.enableVideo();
+    }
     await _engine.setChannelProfile(
         ChannelProfile.LiveBroadcasting);
     await _engine.setClientRole(
@@ -165,6 +268,11 @@ class _CallPageState
   /// Video layout wrapper
   Widget _viewRows() {
     final views = _getRenderViews();
+    if (views != null) {
+      if (views.length > 1) {
+        _timer.cancel();
+      }
+    }
     switch (views.length) {
       case 1:
         return Container(
@@ -237,7 +345,7 @@ class _CallPageState
             child: Icon(
               Icons.call_end,
               color: Colors.white,
-              size: 35.0,
+              size: 20.0,
             ),
             shape: CircleBorder(),
             elevation: 2.0,
@@ -255,7 +363,37 @@ class _CallPageState
             elevation: 2.0,
             fillColor: Colors.white,
             padding: const EdgeInsets.all(12.0),
-          )
+          ),
+          RawMaterialButton(
+            onPressed: () async {
+              if (joinWithVideo == false) {
+                setState(() {
+                  joinWithVideo = true;
+                });
+                await _engine.enableVideo();
+              } else {
+                setState(() {
+                  joinWithVideo = false;
+                });
+                await _engine.disableVideo();
+              }
+            },
+            child: Icon(
+              joinWithVideo
+                  ? Icons.videocam
+                  : Icons.videocam_off,
+              color: joinWithVideo
+                  ? Colors.blueAccent
+                  : Colors.white,
+              size: 20.0,
+            ),
+            shape: CircleBorder(),
+            elevation: 2.0,
+            fillColor: joinWithVideo
+                ? Colors.white
+                : Colors.blueAccent,
+            padding: const EdgeInsets.all(15.0),
+          ),
         ],
       ),
     );
@@ -326,10 +464,15 @@ class _CallPageState
     await FirebaseFirestore.instance
         .collection('users')
         .doc(peerId)
-        .update({
-      'channelInvitationSounds':
-          null
-    });
+        .update(
+            {'channelInvitationSounds': null});
+    if (isReceiver) {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) =>
+                  HomeScreen()));
+    }
   }
 
   void _onToggleMute() {

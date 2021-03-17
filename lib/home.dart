@@ -26,6 +26,10 @@ import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import 'package:device_apps/device_apps.dart';
+import 'package:device_info/device_info.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'main.dart';
 
@@ -36,7 +40,7 @@ class HomeScreen extends StatefulWidget {
   final email;
   HomeScreen(
       {Key key,
-      @required this.currentUserId,
+      this.currentUserId,
       this.position,
       this.radius,
       this.email})
@@ -59,12 +63,14 @@ class HomeScreenState extends State<HomeScreen>
       @required this.radius,
       this.email});
 
-  final String currentUserId;
+  String currentUserId;
   final position;
   String username;
   var radius;
-  final email;
+  String email;
+  String peerEmail;
   Position pos;
+  bool showingIncomingScreen = false;
 
   SharedPreferences prefs;
 
@@ -83,6 +89,7 @@ class HomeScreenState extends State<HomeScreen>
   var notificationTitle;
   var notificationMsg;
   var channelIdVOIP;
+  List<Map<String, String>> installedApps;
 
   bool isLoading = false;
 
@@ -93,6 +100,18 @@ class HomeScreenState extends State<HomeScreen>
     const Choice(
         title: 'Log out',
         icon: Icons.exit_to_app),
+  ];
+
+  List<SMSChoice> smsChoices = const <SMSChoice>[
+    const SMSChoice(
+        title: 'Will call you back later',
+        icon: Icons.access_time),
+    const SMSChoice(
+        title: 'In a meeting',
+        icon: Icons.meeting_room),
+    const SMSChoice(
+        title: 'Driving. Will call you back',
+        icon: Icons.directions_car),
   ];
 
   Timer timer;
@@ -141,6 +160,478 @@ class HomeScreenState extends State<HomeScreen>
     }
   }
 
+  showIncomingVideoCallScreen(
+      peerAvatar, peerName, peerId) async {
+    showingIncomingScreen = true;
+    showDialog(
+        context: context,
+        builder: (_) => Scaffold(
+              body: Container(
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(
+                    vertical: 100),
+                child: Column(
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      "Incoming Video Call...",
+                      style: TextStyle(
+                        fontSize: 25,
+                      ),
+                    ),
+                    SizedBox(height: 50),
+                    Material(
+                      child: CachedNetworkImage(
+                        placeholder:
+                            (context, url) =>
+                                Container(
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 1.0,
+                            valueColor:
+                                AlwaysStoppedAnimation<
+                                        Color>(
+                                    themeColor),
+                          ),
+                          width: 80.0,
+                          height: 80.0,
+                          padding: EdgeInsets.all(
+                              15.0),
+                        ),
+                        imageUrl: peerAvatar,
+                        width: 80.0,
+                        height: 80.0,
+                        fit: BoxFit.cover,
+                      ),
+                      borderRadius:
+                          BorderRadius.all(
+                              Radius.circular(
+                                  40.0)),
+                      clipBehavior: Clip.hardEdge,
+                    ),
+                    SizedBox(height: 15),
+                    Text(
+                      peerName,
+                      style: TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
+                        fontSize: 25,
+                      ),
+                    ),
+                    SizedBox(height: 75),
+                    Row(
+                      mainAxisAlignment:
+                          MainAxisAlignment
+                              .center,
+                      children: <Widget>[
+                        RawMaterialButton(
+                          child: Icon(
+                            Icons.call_end,
+                            color:
+                                Colors.redAccent,
+                            size: 30.0,
+                          ),
+                          shape: CircleBorder(),
+                          elevation: 2.0,
+                          fillColor: Colors.white,
+                          padding:
+                              const EdgeInsets
+                                  .all(8.0),
+                          onPressed: () async {
+                            Navigator.pop(
+                                context);
+
+                            FirebaseFirestore
+                                .instance
+                                .collection(
+                                    'users')
+                                .doc(
+                                    currentUserId)
+                                .update({
+                              'channelInvitationSounds':
+                                  null
+                            });
+                          },
+                        ),
+                        RawMaterialButton(
+                            child: Icon(
+                              Icons.call,
+                              color: Colors
+                                  .blueAccent,
+                              size: 30.0,
+                            ),
+                            shape: CircleBorder(),
+                            elevation: 2.0,
+                            fillColor:
+                                Colors.white,
+                            padding:
+                                const EdgeInsets
+                                    .all(8.0),
+                            onPressed: () async {
+                              Navigator.pop(
+                                  context);
+
+                              await _handleCameraAndMic(
+                                  Permission
+                                      .camera);
+
+                              await _handleCameraAndMic(
+                                  Permission
+                                      .microphone);
+
+                              FirebaseFirestore
+                                  .instance
+                                  .collection(
+                                      'users')
+                                  .doc(
+                                      currentUserId)
+                                  .update({
+                                'channelInvitationSounds':
+                                    null
+                              });
+
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            CallPageVideo(
+                                      channelName:
+                                          peerId
+                                              .toString(),
+                                      peerId: peerId
+                                          .toString(),
+                                      joinWithVideo:
+                                          false,
+                                      isReceiver:
+                                          true,
+                                    ),
+                                  ));
+                            }),
+                        RawMaterialButton(
+                            child: Icon(
+                              Icons
+                                  .video_call_rounded,
+                              color: Colors.green,
+                              size: 30.0,
+                            ),
+                            shape: CircleBorder(),
+                            elevation: 2.0,
+                            fillColor:
+                                Colors.white,
+                            padding:
+                                const EdgeInsets
+                                    .all(8.0),
+                            onPressed: () async {
+                              Navigator.pop(
+                                  context);
+
+                              await _handleCameraAndMic(
+                                  Permission
+                                      .camera);
+
+                              await _handleCameraAndMic(
+                                  Permission
+                                      .microphone);
+
+                              FirebaseFirestore
+                                  .instance
+                                  .collection(
+                                      'users')
+                                  .doc(
+                                      currentUserId)
+                                  .update({
+                                'channelInvitationSounds':
+                                    null
+                              });
+
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            CallPageVideo(
+                                      channelName:
+                                          peerId
+                                              .toString(),
+                                      peerId: peerId
+                                          .toString(),
+                                      joinWithVideo:
+                                          true,
+                                    ),
+                                  ));
+                            }),
+                        RawMaterialButton(
+                          child: Icon(
+                            Icons
+                                .message_outlined,
+                            color: Colors.blue,
+                            size: 30.0,
+                          ),
+                          shape: CircleBorder(),
+                          elevation: 2.0,
+                          fillColor: Colors.white,
+                          padding:
+                              const EdgeInsets
+                                  .all(8.0),
+                          onPressed: () async {
+                            showDialog(
+                                context: context,
+                                builder: (_) =>
+                                    AlertDialog(
+                                        title: Text(
+                                            'SMS Options'),
+                                        actions: <
+                                            Widget>[
+                                          PopupMenuButton<
+                                              SMSChoice>(
+                                            onSelected:
+                                                onItemSMSMenuPress,
+                                            itemBuilder:
+                                                (BuildContext context) {
+                                              return smsChoices.map((SMSChoice
+                                                  smsChoice) {
+                                                return PopupMenuItem<SMSChoice>(
+                                                    value: smsChoice,
+                                                    child: Row(
+                                                      children: <Widget>[
+                                                        Icon(
+                                                          smsChoice.icon,
+                                                          color: primaryColor,
+                                                        ),
+                                                        Container(
+                                                          width: 10.0,
+                                                        ),
+                                                        Text(
+                                                          smsChoice.title,
+                                                          style: TextStyle(color: primaryColor),
+                                                        ),
+                                                      ],
+                                                    ));
+                                              }).toList();
+                                            },
+                                          ),
+                                        ]));
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ));
+  }
+
+  showIncomingVoiceCallScreen(
+      peerAvatar, peerName, peerId) async {
+    showingIncomingScreen = true;
+    showDialog(
+        context: context,
+        builder: (_) => Scaffold(
+              body: Container(
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(
+                    vertical: 100),
+                child: Column(
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      "Incoming Call...",
+                      style: TextStyle(
+                        fontSize: 25,
+                      ),
+                    ),
+                    SizedBox(height: 50),
+                    Material(
+                      child: CachedNetworkImage(
+                        placeholder:
+                            (context, url) =>
+                                Container(
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 1.0,
+                            valueColor:
+                                AlwaysStoppedAnimation<
+                                        Color>(
+                                    themeColor),
+                          ),
+                          width: 80.0,
+                          height: 80.0,
+                          padding: EdgeInsets.all(
+                              15.0),
+                        ),
+                        imageUrl: peerAvatar,
+                        width: 80.0,
+                        height: 80.0,
+                        fit: BoxFit.cover,
+                      ),
+                      borderRadius:
+                          BorderRadius.all(
+                              Radius.circular(
+                                  40.0)),
+                      clipBehavior: Clip.hardEdge,
+                    ),
+                    SizedBox(height: 15),
+                    Text(
+                      peerName,
+                      style: TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
+                        fontSize: 25,
+                      ),
+                    ),
+                    SizedBox(height: 75),
+                    Row(
+                      mainAxisAlignment:
+                          MainAxisAlignment
+                              .center,
+                      children: <Widget>[
+                        RawMaterialButton(
+                          child: Icon(
+                            Icons.call_end,
+                            color:
+                                Colors.redAccent,
+                            size: 30.0,
+                          ),
+                          shape: CircleBorder(),
+                          elevation: 2.0,
+                          fillColor: Colors.white,
+                          padding:
+                              const EdgeInsets
+                                  .all(8.0),
+                          onPressed: () async {
+                            Navigator.pop(
+                                context);
+
+                            FirebaseFirestore
+                                .instance
+                                .collection(
+                                    'users')
+                                .doc(
+                                    currentUserId)
+                                .update({
+                              'channelInvitationSounds':
+                                  null
+                            });
+                          },
+                        ),
+                        RawMaterialButton(
+                            child: Icon(
+                              Icons.call,
+                              color: Colors
+                                  .blueAccent,
+                              size: 30.0,
+                            ),
+                            shape: CircleBorder(),
+                            elevation: 2.0,
+                            fillColor:
+                                Colors.white,
+                            padding:
+                                const EdgeInsets
+                                    .all(8.0),
+                            onPressed: () async {
+                              Navigator.pop(
+                                  context);
+
+                              await _handleCameraAndMic(
+                                  Permission
+                                      .microphone);
+
+                              FirebaseFirestore
+                                  .instance
+                                  .collection(
+                                      'users')
+                                  .doc(
+                                      currentUserId)
+                                  .update({
+                                'channelInvitationSounds':
+                                    null
+                              });
+
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            CallPageAudio(
+                                      channelName:
+                                          peerId
+                                              .toString(),
+                                      peerId: peerId
+                                          .toString(),
+                                      selfAvatar:
+                                          prefs.getString(
+                                              'photoUrl'),
+                                      peerAvatar:
+                                          peerAvatar,
+                                      isReceiver:
+                                          true,
+                                    ),
+                                  ));
+                            }),
+                        RawMaterialButton(
+                          child: Icon(
+                            Icons
+                                .message_outlined,
+                            color: Colors.blue,
+                            size: 30.0,
+                          ),
+                          shape: CircleBorder(),
+                          elevation: 2.0,
+                          fillColor: Colors.white,
+                          padding:
+                              const EdgeInsets
+                                  .all(8.0),
+                          onPressed: () async {
+                            showDialog(
+                                context: context,
+                                builder: (_) =>
+                                    AlertDialog(
+                                        content: Text(
+                                            'SMS Options'),
+                                        actions: <
+                                            Widget>[
+                                          PopupMenuButton<
+                                              SMSChoice>(
+                                            onSelected:
+                                                onItemSMSMenuPress,
+                                            itemBuilder:
+                                                (BuildContext context) {
+                                              return smsChoices.map((SMSChoice
+                                                  smsChoice) {
+                                                return PopupMenuItem<SMSChoice>(
+                                                    value: smsChoice,
+                                                    child: Row(
+                                                      children: <Widget>[
+                                                        Icon(
+                                                          smsChoice.icon,
+                                                          color: primaryColor,
+                                                        ),
+                                                        Container(
+                                                          width: 10.0,
+                                                        ),
+                                                        Text(
+                                                          smsChoice.title,
+                                                          style: TextStyle(color: primaryColor),
+                                                        ),
+                                                      ],
+                                                    ));
+                                              }).toList();
+                                            },
+                                          ),
+                                        ]));
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ));
+  }
+
   checkForBackgroundCalls() async {
     await FirebaseFirestore.instance
         .collection('users')
@@ -173,10 +664,54 @@ class HomeScreenState extends State<HomeScreen>
                 FlutterRingtonePlayer
                     .playRingtone();
                 isRingtonePlaying = true;
+                await DeviceApps.openApp(
+                    'com.example.networkapp');
+                peerEmail = document.data()[
+                        'channelInvitationSounds']
+                    ['peerEmail'];
+                if (document.data()[
+                            'channelInvitationSounds']
+                        ['type'] ==
+                    'video') {
+                  showIncomingVideoCallScreen(
+                    document.data()[
+                            'channelInvitationSounds']
+                        ['peerAvatar'],
+                    document.data()[
+                            'channelInvitationSounds']
+                        ['peerName'],
+                    document.data()[
+                            'channelInvitationSounds']
+                        ['peerId'],
+                  );
+                } else {
+                  showIncomingVoiceCallScreen(
+                    document.data()[
+                            'channelInvitationSounds']
+                        ['peerAvatar'],
+                    document.data()[
+                            'channelInvitationSounds']
+                        ['peerName'],
+                    document.data()[
+                            'channelInvitationSounds']
+                        ['peerId'],
+                  );
+                }
               }
             } else {
               FlutterRingtonePlayer.stop();
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          HomeScreen(
+                              currentUserId:
+                                  currentUserId,
+                              position: pos,
+                              radius: radius,
+                              email: email)));
               isRingtonePlaying = false;
+              showingIncomingScreen = false;
               await FirebaseFirestore.instance
                   .collection('users')
                   .doc(currentUserId)
@@ -203,6 +738,89 @@ class HomeScreenState extends State<HomeScreen>
         isRingtonePlaying = false;
       }
     });
+  }
+
+  Future<String> _downloadAndSaveFile(
+      String url, String fileName) async {
+    final Directory directory =
+        await getApplicationDocumentsDirectory();
+    final String filePath =
+        '${directory.path}/$fileName';
+    final http.Response response =
+        await http.get(url);
+    final File file = File(filePath);
+    await file.writeAsBytes(response.bodyBytes);
+    return filePath;
+  }
+
+  Future<void> _showMessagingNotification(
+      msg, data) async {
+    // use a platform channel to resolve an Android drawable resource to a URI.
+    // This is NOT part of the notifications plugin. Calls made over this
+    /// channel is handled by the app
+
+    /// First two person objects will use icons that part of the Android app's
+    /// drawable resources
+    const Person me = Person(
+      name: 'Me',
+      key: '1',
+      uri: 'tel:1234567890',
+    );
+
+    // download the icon that would be use for the lunch bot person
+    final String largeIconPath =
+        await _downloadAndSaveFile(
+            data['peerAvatar'], 'largeIcon');
+    // this person object will use an icon that was downloaded
+    final Person lunchBot = Person(
+      name: data['name'],
+      key: 'bot',
+      bot: true,
+      icon: BitmapFilePathAndroidIcon(
+          largeIconPath),
+    );
+    final List<Message> messages = <Message>[
+      Message(
+          data['body'], DateTime.now(), lunchBot),
+    ];
+    final MessagingStyleInformation
+        messagingStyle =
+        MessagingStyleInformation(me,
+            groupConversation: true,
+            conversationTitle: '',
+            htmlFormatContent: true,
+            htmlFormatTitle: true,
+            messages: messages);
+    final AndroidNotificationDetails
+        androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+            'message channel id',
+            'Networkapp messaging',
+            'Messaging Platform',
+            category: 'msg',
+            styleInformation: messagingStyle,
+            playSound: true,
+            enableVibration: true,
+            importance: Importance.max,
+            priority: Priority.high,
+            enableLights: true,
+            fullScreenIntent: true,
+            timeoutAfter: data['timeout'],
+            showWhen: true,
+            ledColor: const Color.fromARGB(
+                255, 255, 0, 0),
+            ledOnMs: 1000,
+            ledOffMs: 8000);
+    final NotificationDetails
+        platformChannelSpecifics =
+        NotificationDetails(
+            android:
+                androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+        0,
+        data['title'],
+        data['content'],
+        platformChannelSpecifics);
   }
 
   /*
@@ -266,43 +884,33 @@ class HomeScreenState extends State<HomeScreen>
     firebaseMessaging.configure(onMessage:
         (Map<String, dynamic> message) {
       print('onMessage: $message');
-      FlutterRingtonePlayer.play(
-        android: AndroidSounds.notification,
-        ios: IosSounds.glass,
-        looping: true,
-        volume: 1.0,
-      );
-      Platform.isAndroid
-          ? showNotification(
-              message['notification'],
-              message['data']['channelId'])
-          : showNotification(
-              message['aps']['alert'],
-              message['data']['channelId']);
-      showChannelInvitationDialog(message);
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUserId)
-          .update(
-              {'channelInvitationSounds': null});
+      if (message['data']['type'] ==
+          "messaging") {
+        _showMessagingNotification(
+            message['data']['body'],
+            message['data']);
+      } else {
+        Platform.isAndroid
+            ? showNotification(
+                message['notification'],
+                message['data'])
+            : showNotification(
+                message['aps']['alert'],
+                message['data']);
+        //showChannelInvitationDialog(message);
+
+        checkForBackgroundCalls();
+      }
       return;
     }, onResume: (Map<String, dynamic> message) {
       print('onResume: $message');
-      showChannelInvitationDialog(message);
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUserId)
-          .update(
-              {'channelInvitationSounds': null});
+      //showChannelInvitationDialog(message);
+      checkForBackgroundCalls();
       return;
     }, onLaunch: (Map<String, dynamic> message) {
       print('onLaunch: $message');
-      showChannelInvitationDialog(message);
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUserId)
-          .update(
-              {'channelInvitationSounds': null});
+      //showChannelInvitationDialog(message);
+      checkForBackgroundCalls();
       return;
     });
 
@@ -354,6 +962,16 @@ class HomeScreenState extends State<HomeScreen>
           MaterialPageRoute(
               builder: (context) => MapsDemo()));
     }
+  }
+
+  void onItemSMSMenuPress(SMSChoice smsChoice) {
+    final Email email = Email(
+      body: smsChoice.title,
+      subject: 'Message from ' + username,
+      recipients: [peerEmail],
+      isHTML: false,
+    );
+    FlutterEmailSender.send(email);
   }
 
   showChannelInvitationDialog(message) async {
@@ -457,8 +1075,7 @@ class HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void showNotification(
-      message, channelId) async {
+  void showNotification(message, data) async {
     var androidPlatformChannelSpecifics =
         new AndroidNotificationDetails(
             Platform.isAndroid
@@ -472,14 +1089,12 @@ class HomeScreenState extends State<HomeScreen>
             priority: Priority.high,
             enableLights: true,
             fullScreenIntent: true,
-            sound:
-                RawResourceAndroidNotificationSound(
-                    'slow_spring_board'),
+            timeoutAfter: data['timeout'],
             showWhen: true,
             ledColor: const Color.fromARGB(
                 255, 255, 0, 0),
             ledOnMs: 1000,
-            ledOffMs: 5000);
+            ledOffMs: 8000);
     var iOSPlatformChannelSpecifics =
         new IOSNotificationDetails();
     var platformChannelSpecifics =
@@ -539,7 +1154,7 @@ class HomeScreenState extends State<HomeScreen>
                     Container(
                       child: Icon(
                         Icons.exit_to_app,
-                        size: 30.0,
+                        size: 25.0,
                         color: Colors.white,
                       ),
                       margin: EdgeInsets.only(
@@ -654,6 +1269,9 @@ class HomeScreenState extends State<HomeScreen>
   void readLocal() async {
     prefs = await SharedPreferences.getInstance();
     radius = prefs.getInt('radius') ?? radius;
+    email = prefs.getString('email') ?? email;
+    currentUserId =
+        prefs.getString('id') ?? currentUserId;
     pos = await Geolocator().getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
     username = prefs.getString('nickname');
@@ -840,7 +1458,8 @@ class HomeScreenState extends State<HomeScreen>
         "click_action":
             "FLUTTER_NOTIFICATION_CLICK",
         "id": "1",
-        "status": "done"
+        "status": "done",
+        "timeout": null,
       },
       "to": "$token"
     });
@@ -1122,7 +1741,7 @@ class HomeScreenState extends State<HomeScreen>
               ],
               isHTML: false,
             );
-            FlutterEmailSender.send(email);
+            //FlutterEmailSender.send(email);
 
             sendNotification(
                 document.id,
@@ -1149,6 +1768,13 @@ class HomeScreenState extends State<HomeScreen>
 
 class Choice {
   const Choice({this.title, this.icon});
+
+  final String title;
+  final IconData icon;
+}
+
+class SMSChoice {
+  const SMSChoice({this.title, this.icon});
 
   final String title;
   final IconData icon;

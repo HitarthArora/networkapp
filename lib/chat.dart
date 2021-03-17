@@ -16,6 +16,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 
 import 'main.dart';
 
@@ -93,7 +95,8 @@ class ChatS extends State<Chat> {
           MaterialPageRoute(
               builder: (context) => VoiceCall(
                   emailId: emailId,
-                  peerId: peerId)));
+                  peerId: peerId,
+                  peerAvatar: peerAvatar)));
     } else {
       Navigator.push(
           choice.context,
@@ -499,11 +502,76 @@ class ChatScreenState extends State<ChatScreen> {
       listScrollController.animateTo(0.0,
           duration: Duration(milliseconds: 300),
           curve: Curves.easeOut);
+
+      sendNotification(peerId, content);
     } else {
       Fluttertoast.showToast(
           msg: 'Nothing to send',
           backgroundColor: Colors.black,
           textColor: Colors.red);
+    }
+  }
+
+  static Future<String> getToken(userId) async {
+    final FirebaseFirestore _db =
+        FirebaseFirestore.instance;
+    var token;
+    await _db
+        .collection('users')
+        .doc(userId)
+        .get()
+        .then((document) {
+      token = document.data()['pushToken'];
+    });
+    return token;
+  }
+
+  Future<void> sendNotification(
+      receiver, msg) async {
+    var token = await getToken(receiver);
+    print('receiver id: $peerId');
+    print('token : $token');
+
+    final data = jsonEncode({
+      "notification": {
+        "body": msg,
+        "title": prefs.getString('nickname'),
+      },
+      "priority": "high",
+      "data": {
+        "click_action":
+            "FLUTTER_NOTIFICATION_CLICK",
+        "id": "1",
+        "status": "done",
+        "body": msg,
+        "title": prefs.getString('nickname'),
+        "timeout": null,
+        "type": "messaging",
+        "peerAvatar": prefs.getString('photoUrl'),
+        "name": prefs.getString('nickname'),
+      },
+      "to": "$token",
+      "apns": {
+        "payload": {
+          "aps": {"sound": "default"}
+        }
+      },
+    });
+
+    try {
+      await http.post(
+        Uri.parse(
+            "https://fcm.googleapis.com/fcm/send"),
+        headers: <String, String>{
+          'content-type': 'application/json',
+          'Authorization':
+              'key=AAAABKJiMQo:APA91bGkKzaM07yF2FTfTIrKALQajayZuutRguc1gxvkWZDd19p-xI0VYt9G0lQR3maypMb9Nt_1t4VmtKTKZ66ISl-ZHmvOd2CrtjfzvEeMNg_Mk9XqbRT5ECZbiiBULQuYuAKCM8z0'
+        },
+        body: data,
+      );
+      print('FCM request for device sent!');
+    } catch (e) {
+      print('error: $e');
     }
   }
 

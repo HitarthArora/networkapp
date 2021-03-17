@@ -51,6 +51,7 @@ class SettingsScreenState
       {Key key, this.x, this.data});
 
   TextEditingController controllerNickname;
+  TextEditingController controllerStatus;
   TextEditingController controllerAboutMe;
   TextEditingController controllerRadius;
   TextEditingController controllerLatitude;
@@ -62,6 +63,7 @@ class SettingsScreenState
 
   String id = '';
   String nickname = '';
+  String status = '';
   String aboutMe = '';
   String email = '';
   String photoUrl = '';
@@ -89,6 +91,13 @@ class SettingsScreenState
     prefs = await SharedPreferences.getInstance();
     id = prefs.getString('id') ?? '';
     nickname = data != null ? data['name'] : '';
+    status = data != null
+        ? data['status'] != null
+            ? data['status'] == "online"
+                ? "Online"
+                : "Offline"
+            : ''
+        : '';
     aboutMe = data != null ? data['aboutMe'] : '';
     photoUrl =
         data != null ? data['photoUrl'] : '';
@@ -96,7 +105,8 @@ class SettingsScreenState
         data != null ? data['latitude'] : '';
     longitude =
         data != null ? data['longitude'] : '';
-        distance= data != null ? data['distance'] : '';
+    distance =
+        data != null ? data['distance'] : '';
     email = data != null ? data['email'] : '';
     radius = prefs.getInt('radius') ?? '';
     _currentSliderValue =
@@ -106,6 +116,8 @@ class SettingsScreenState
 
     controllerNickname =
         TextEditingController(text: nickname);
+    controllerStatus =
+        TextEditingController(text: status);
     controllerAboutMe =
         TextEditingController(text: aboutMe);
     controllerRadius =
@@ -118,7 +130,7 @@ class SettingsScreenState
             text: longitude.toString());
     controllerDistance =
         new TextEditingController(
-            text: distance.toString() +" km");
+            text: distance.toString() + " km");
     controllerEmail =
         new TextEditingController(text: email);
 
@@ -370,6 +382,48 @@ class SettingsScreenState
                         left: 30.0, right: 30.0),
                   ),
 
+                  Container(
+                    child: Text(
+                      'Status',
+                      style: TextStyle(
+                          fontStyle:
+                              FontStyle.italic,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: primaryColor),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 10.0,
+                        top: 30.0,
+                        bottom: 5.0),
+                  ),
+                  Container(
+                    child: Theme(
+                      data: Theme.of(context)
+                          .copyWith(
+                              primaryColor:
+                                  primaryColor),
+                      child: TextField(
+                        enabled: false,
+                        decoration:
+                            InputDecoration(
+                          hintText: 'Offline',
+                          contentPadding:
+                              EdgeInsets.all(5.0),
+                          hintStyle: TextStyle(
+                              color: greyColor),
+                        ),
+                        controller:
+                            controllerStatus,
+                        onChanged: (value) {},
+                        focusNode:
+                            focusNodeAboutMe,
+                      ),
+                    ),
+                    margin: EdgeInsets.only(
+                        left: 30.0, right: 30.0),
+                  ),
+
                   // About me
                   Container(
                     child: Text(
@@ -397,7 +451,7 @@ class SettingsScreenState
                         decoration:
                             InputDecoration(
                           hintText:
-                              'Fun, like travel and play PES...',
+                              'Personal description',
                           contentPadding:
                               EdgeInsets.all(5.0),
                           hintStyle: TextStyle(
