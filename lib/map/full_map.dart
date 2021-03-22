@@ -173,6 +173,7 @@ class FullMapState extends State<FullMap> {
           'aboutMe': document.data()['aboutMe'],
           'status': document.data()['status'],
           'distance': dis,
+          'id': document.data()['id']
         };
         userList.add(myObject);
       });
@@ -235,7 +236,9 @@ class FullMapState extends State<FullMap> {
                                       ? finalData
                                       : dataLong
                                               .toList()[
-                                          0])));
+                                          0],
+                                  currentUserId:
+                                      userId)));
                 }
               }
             }));

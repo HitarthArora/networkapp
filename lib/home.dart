@@ -14,6 +14,8 @@ import 'package:networkapp/settings.dart';
 import 'package:networkapp/map/main.dart';
 import 'package:networkapp/voip/video/src/pages/call.dart';
 import 'package:networkapp/voip/audio/src/pages/call.dart';
+import 'package:networkapp/profile-visits/profile_visits.dart';
+import 'package:networkapp/status-page/status_page.dart';
 import 'package:networkapp/widget/loading.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -27,7 +29,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:device_apps/device_apps.dart';
-import 'package:device_info/device_info.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -71,9 +72,7 @@ class HomeScreenState extends State<HomeScreen>
   String peerEmail;
   Position pos;
   bool showingIncomingScreen = false;
-
   SharedPreferences prefs;
-
   final FirebaseMessaging firebaseMessaging =
       FirebaseMessaging();
   final FlutterLocalNotificationsPlugin
@@ -83,20 +82,24 @@ class HomeScreenState extends State<HomeScreen>
       GoogleSignIn();
   final geo = Geoflutterfire();
   final _firestore = FirebaseFirestore.instance;
-
   var data;
   var x = 2;
   var notificationTitle;
   var notificationMsg;
   var channelIdVOIP;
   List<Map<String, String>> installedApps;
-
   bool isLoading = false;
 
   List<Choice> choices = const <Choice>[
     const Choice(
         title: 'Settings', icon: Icons.settings),
     const Choice(title: 'Map', icon: Icons.map),
+    const Choice(
+        title: 'Profile Visits',
+        icon: Icons.account_box_rounded),
+    const Choice(
+        title: 'Status Page',
+        icon: Icons.featured_video),
     const Choice(
         title: 'Log out',
         icon: Icons.exit_to_app),
@@ -953,6 +956,25 @@ class HomeScreenState extends State<HomeScreen>
           MaterialPageRoute(
               builder: (context) =>
                   ChatSettings(x: x)));
+    } else if (choice.title == 'Profile Visits') {
+      setState(() {
+        data = 2;
+      });
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => ProfileVisits(
+                  currentUserId: currentUserId)));
+    } else if (choice.title == 'Status Page') {
+      setState(() {
+        data = 2;
+      });
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => StatusPage(
+                  avatar: prefs
+                      .getString('photoUrl'))));
     } else {
       setState(() {
         data = 2;
@@ -1519,99 +1541,100 @@ class HomeScreenState extends State<HomeScreen>
     });
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'MAIN',
-          style: TextStyle(
-              color: primaryColor,
-              fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        actions: <Widget>[
-          PopupMenuButton<Choice>(
-            onSelected: onItemMenuPress,
-            itemBuilder: (BuildContext context) {
-              return choices.map((Choice choice) {
-                return PopupMenuItem<Choice>(
-                    value: choice,
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          choice.icon,
-                          color: primaryColor,
-                        ),
-                        Container(
-                          width: 10.0,
-                        ),
-                        Text(
-                          choice.title,
-                          style: TextStyle(
-                              color:
-                                  primaryColor),
-                        ),
-                      ],
-                    ));
-              }).toList();
-            },
+        appBar: AppBar(
+          title: Text(
+            'NETWORK',
+            style: TextStyle(
+                color: primaryColor,
+                fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-      body: WillPopScope(
-        child: Stack(
-          children: <Widget>[
-            // List
-            Container(
-              child: StreamBuilder(
-                stream: geo
-                    .collection(
-                        collectionRef:
-                            collectionReference)
-                    .within(
-                        center: center,
-                        radius: radius != null
-                            ? radius.toDouble()
-                            : 100000000,
-                        field: field),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return Center(
-                      child:
-                          CircularProgressIndicator(
-                        valueColor:
-                            AlwaysStoppedAnimation<
-                                    Color>(
-                                themeColor),
-                      ),
-                    );
-                  } else {
-                    return ListView.builder(
-                      padding:
-                          EdgeInsets.all(10.0),
-                      itemBuilder: (context,
-                              index) =>
-                          buildItem(
-                              context,
-                              snapshot
-                                  .data[index]),
-                      itemCount:
-                          snapshot.data.length,
-                    );
-                  }
-                },
-              ),
+          centerTitle: true,
+          actions: <Widget>[
+            PopupMenuButton<Choice>(
+              onSelected: onItemMenuPress,
+              itemBuilder:
+                  (BuildContext context) {
+                return choices
+                    .map((Choice choice) {
+                  return PopupMenuItem<Choice>(
+                      value: choice,
+                      child: Row(
+                        children: <Widget>[
+                          Icon(
+                            choice.icon,
+                            color: primaryColor,
+                          ),
+                          Container(
+                            width: 10.0,
+                          ),
+                          Text(
+                            choice.title,
+                            style: TextStyle(
+                                color:
+                                    primaryColor),
+                          ),
+                        ],
+                      ));
+                }).toList();
+              },
             ),
-
-            // Loading
-            Positioned(
-              child: isLoading
-                  ? const Loading()
-                  : Container(),
-            )
           ],
         ),
-        onWillPop: onBackPress,
-      ),
-    );
+        body: WillPopScope(
+          child: Stack(
+            children: <Widget>[
+              // List
+              Container(
+                child: StreamBuilder(
+                  stream: geo
+                      .collection(
+                          collectionRef:
+                              collectionReference)
+                      .within(
+                          center: center,
+                          radius: radius != null
+                              ? radius.toDouble()
+                              : 100000000,
+                          field: field),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return Center(
+                        child:
+                            CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<
+                                      Color>(
+                                  themeColor),
+                        ),
+                      );
+                    } else {
+                      return ListView.builder(
+                        padding:
+                            EdgeInsets.all(10.0),
+                        itemBuilder: (context,
+                                index) =>
+                            buildItem(
+                                context,
+                                snapshot
+                                    .data[index]),
+                        itemCount:
+                            snapshot.data.length,
+                      );
+                    }
+                  },
+                ),
+              ),
+
+              // Loading
+              Positioned(
+                child: isLoading
+                    ? const Loading()
+                    : Container(),
+              )
+            ],
+          ),
+          onWillPop: onBackPress,
+        ));
   }
 
   Widget buildItem(BuildContext context,
@@ -1679,7 +1702,7 @@ class HomeScreenState extends State<HomeScreen>
                     children: <Widget>[
                       Container(
                         child: Text(
-                          'Nickname: ${document.data()['nickname']}',
+                          'Name: ${document.data()['nickname']}',
                           style: TextStyle(
                               color:
                                   primaryColor),
@@ -1695,7 +1718,7 @@ class HomeScreenState extends State<HomeScreen>
                       ),
                       Container(
                         child: Text(
-                          'About me: ${document.data()['aboutMe'] ?? 'Not available'}',
+                          'About: ${document.data()['aboutMe'] ?? ''}',
                           style: TextStyle(
                               color:
                                   primaryColor),

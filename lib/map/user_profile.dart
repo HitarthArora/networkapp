@@ -10,45 +10,39 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_xlider/flutter_xlider.dart';
+import 'package:intl/intl.dart';
+import 'package:networkapp/chat.dart';
+import 'package:networkapp/voip/video/main.dart';
+import 'package:networkapp/voip/audio/main.dart';
 
-class UserProfile extends StatelessWidget {
-  var x;
-  var data;
-  UserProfile({Key key, this.x, this.data})
+class UserProfile extends StatefulWidget {
+  final x;
+  final data;
+  final currentUserId;
+  UserProfile(
+      {Key key,
+      this.x,
+      this.data,
+      this.currentUserId})
       : super(key: key);
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'USER PROFILE',
-          style: TextStyle(
-              color: primaryColor,
-              fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-      ),
-      body: SettingsScreen(x: x, data: data),
-    );
-  }
+  State createState() => UserProfileState(
+        x: x,
+        data: data,
+        currentUserId: currentUserId,
+      );
 }
 
-class SettingsScreen extends StatefulWidget {
+class UserProfileState
+    extends State<UserProfile> {
   var x;
   var data;
-  SettingsScreen({Key key, this.x, this.data})
-      : super(key: key);
-  @override
-  State createState() =>
-      SettingsScreenState(x: x, data: data);
-}
-
-class SettingsScreenState
-    extends State<SettingsScreen> {
-  var x;
-  var data;
-  SettingsScreenState(
-      {Key key, this.x, this.data});
+  final currentUserId;
+  UserProfileState(
+      {Key key,
+      this.x,
+      this.data,
+      this.currentUserId});
 
   TextEditingController controllerNickname;
   TextEditingController controllerStatus;
@@ -89,7 +83,7 @@ class SettingsScreenState
 
   void readLocal() async {
     prefs = await SharedPreferences.getInstance();
-    id = prefs.getString('id') ?? '';
+    id = data != null ? data['id'] : '';
     nickname = data != null ? data['name'] : '';
     status = data != null
         ? data['status'] != null
@@ -136,6 +130,135 @@ class SettingsScreenState
 
     // Force refresh input
     setState(() {});
+
+    var date = DateTime.now();
+    var day = DateFormat('EEEE').format(date);
+    var month = DateFormat.MMMM().format(date);
+    var insertionValue, monthValue;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(id)
+        .get()
+        .then((document) {
+      var currentValue =
+          document.data()['visitsWeekData'];
+      var weekData = {};
+      if (currentValue != null) {
+        if (currentValue[day.toString()] !=
+            null) {
+          insertionValue =
+              currentValue[day.toString()] + 1;
+        } else {
+          insertionValue = 1;
+        }
+        weekData = currentValue;
+        weekData[day] = insertionValue;
+      } else {
+        weekData[day] = 1;
+      }
+
+      var monthDataDB =
+          document.data()['visitsMonthData'];
+      var monthData = {};
+      if (monthDataDB != null) {
+        if (monthDataDB[month.toString()] !=
+            null) {
+          monthValue =
+              monthDataDB[month.toString()] + 1;
+        } else {
+          monthValue = 1;
+        }
+        monthData = monthDataDB;
+        monthData[month] = monthValue;
+      } else {
+        monthData[month] = 1;
+      }
+
+      var userWiseDataDB =
+          document.data()['visitsUserData'];
+      var userWiseData = {}, userValue;
+      if (userWiseDataDB != null) {
+        if (userWiseDataDB[currentUserId] !=
+            null) {
+          userValue =
+              userWiseDataDB[currentUserId] + 1;
+        } else {
+          userValue = 1;
+        }
+        userWiseData = userWiseDataDB;
+        userWiseData[currentUserId] = userValue;
+      } else {
+        userWiseData[currentUserId] = 1;
+      }
+
+      var lastVisitUserDataDB =
+          document.data()['visitsUserData'];
+      var lastVisitUserData = {};
+      DateTime now = DateTime.now();
+      DateFormat formatter =
+          DateFormat('dd-MM-yyyy');
+      String formatted = formatter.format(now);
+      String currentTime =
+          DateFormat.jm().format(DateTime.now());
+      if (userWiseDataDB != null) {
+        lastVisitUserData = lastVisitUserDataDB;
+        lastVisitUserData[currentUserId] =
+            formatted + " " + currentTime;
+      } else {
+        lastVisitUserData[currentUserId] =
+            formatted + " " + currentTime;
+      }
+
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .update({
+        'visitsWeekData': weekData,
+        'visitsMonthData': monthData,
+        'userWiseData': userWiseData,
+        'lastVisitUserData': lastVisitUserData,
+      });
+    });
+  }
+
+  List<Choice> choices = const <Choice>[
+    const Choice(
+        title: 'Chat',
+        icon: Icons.message_outlined),
+    const Choice(
+        title: 'Voice Call',
+        icon: Icons.local_phone),
+    const Choice(
+        title: 'Video Call',
+        icon: Icons.video_call_sharp),
+  ];
+
+  void onItemMenuPress(Choice choice) {
+    if (choice.title == 'Chat') {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => Chat(
+                  peerId: id,
+                  peerAvatar: photoUrl,
+                  emailId: email,
+                  peerName: nickname,
+                  peerStatus: status)));
+    } else if (choice.title == 'Voice Call') {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => VoiceCall(
+                  emailId: email,
+                  peerId: id,
+                  peerAvatar: photoUrl)));
+    } else {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => VideoCall(
+                  emailId: email, peerId: id)));
+    }
   }
 
   Future getImage() async {
@@ -259,41 +382,109 @@ class SettingsScreenState
   @override
   Widget build(BuildContext context) {
     print(radius);
-    return Stack(
-      children: <Widget>[
-        SingleChildScrollView(
-          child: Column(
-            children: <Widget>[
-              // Avatar
-              Container(
-                child: Center(
-                  child: Stack(
-                    children: <Widget>[
-                      (avatarImageFile == null)
-                          ? (photoUrl != ''
-                              ? Material(
-                                  child:
-                                      CachedNetworkImage(
-                                    placeholder: (context,
-                                            url) =>
-                                        Container(
+    return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'USER PROFILE',
+            style: TextStyle(
+                color: primaryColor,
+                fontWeight: FontWeight.bold),
+          ),
+          centerTitle: true,
+          actions: currentUserId != id
+              ? <Widget>[
+                  PopupMenuButton<Choice>(
+                    onSelected: onItemMenuPress,
+                    itemBuilder:
+                        (BuildContext context) {
+                      return choices
+                          .map((Choice choice) {
+                        return PopupMenuItem<
+                                Choice>(
+                            value: choice,
+                            child: Row(
+                              children: <Widget>[
+                                Icon(
+                                  choice.icon,
+                                  color:
+                                      primaryColor,
+                                ),
+                                Container(
+                                  width: 10.0,
+                                ),
+                                Text(
+                                  choice.title,
+                                  style: TextStyle(
+                                      color:
+                                          primaryColor),
+                                ),
+                              ],
+                            ));
+                      }).toList();
+                    },
+                  ),
+                ]
+              : <Widget>[],
+        ),
+        body: Stack(
+          children: <Widget>[
+            SingleChildScrollView(
+              child: Column(
+                children: <Widget>[
+                  // Avatar
+                  Container(
+                    child: Center(
+                      child: Stack(
+                        children: <Widget>[
+                          (avatarImageFile ==
+                                  null)
+                              ? (photoUrl != ''
+                                  ? Material(
                                       child:
-                                          CircularProgressIndicator(
-                                        strokeWidth:
-                                            2.0,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                themeColor),
+                                          CachedNetworkImage(
+                                        placeholder:
+                                            (context, url) =>
+                                                Container(
+                                          child:
+                                              CircularProgressIndicator(
+                                            strokeWidth:
+                                                2.0,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(themeColor),
+                                          ),
+                                          width:
+                                              90.0,
+                                          height:
+                                              90.0,
+                                          padding:
+                                              EdgeInsets.all(20.0),
+                                        ),
+                                        imageUrl:
+                                            photoUrl,
+                                        width:
+                                            90.0,
+                                        height:
+                                            90.0,
+                                        fit: BoxFit
+                                            .cover,
                                       ),
-                                      width: 90.0,
-                                      height:
-                                          90.0,
-                                      padding:
-                                          EdgeInsets.all(
-                                              20.0),
-                                    ),
-                                    imageUrl:
-                                        photoUrl,
+                                      borderRadius:
+                                          BorderRadius.all(
+                                              Radius.circular(45.0)),
+                                      clipBehavior:
+                                          Clip.hardEdge,
+                                    )
+                                  : Icon(
+                                      Icons
+                                          .account_circle,
+                                      size: 90.0,
+                                      color:
+                                          greyColor,
+                                    ))
+                              : Material(
+                                  child:
+                                      Image.file(
+                                    avatarImageFile,
                                     width: 90.0,
                                     height: 90.0,
                                     fit: BoxFit
@@ -305,218 +496,213 @@ class SettingsScreenState
                                               45.0)),
                                   clipBehavior:
                                       Clip.hardEdge,
-                                )
-                              : Icon(
-                                  Icons
-                                      .account_circle,
-                                  size: 90.0,
+                                ),
+                        ],
+                      ),
+                    ),
+                    width: double.infinity,
+                    margin: EdgeInsets.all(20.0),
+                  ),
+
+                  // Input
+                  Column(
+                    children: <Widget>[
+                      // Username
+                      Container(
+                        child: Text(
+                          'Name',
+                          style: TextStyle(
+                              fontStyle: FontStyle
+                                  .italic,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
+                                  primaryColor),
+                        ),
+                        margin: EdgeInsets.only(
+                            left: 10.0,
+                            bottom: 5.0,
+                            top: 10.0),
+                      ),
+                      Container(
+                        child: Theme(
+                          data: Theme.of(context)
+                              .copyWith(
+                                  primaryColor:
+                                      primaryColor),
+                          child: TextField(
+                            enabled: false,
+                            decoration:
+                                InputDecoration(
+                              hintText: 'Sweetie',
+                              contentPadding:
+                                  EdgeInsets.all(
+                                      5.0),
+                              hintStyle: TextStyle(
                                   color:
-                                      greyColor,
-                                ))
-                          : Material(
-                              child: Image.file(
-                                avatarImageFile,
-                                width: 90.0,
-                                height: 90.0,
-                                fit: BoxFit.cover,
-                              ),
-                              borderRadius:
-                                  BorderRadius.all(
-                                      Radius.circular(
-                                          45.0)),
-                              clipBehavior:
-                                  Clip.hardEdge,
+                                      greyColor),
                             ),
-                    ],
-                  ),
-                ),
-                width: double.infinity,
-                margin: EdgeInsets.all(20.0),
-              ),
-
-              // Input
-              Column(
-                children: <Widget>[
-                  // Username
-                  Container(
-                    child: Text(
-                      'Nickname',
-                      style: TextStyle(
-                          fontStyle:
-                              FontStyle.italic,
-                          fontWeight:
-                              FontWeight.bold,
-                          color: primaryColor),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 10.0,
-                        bottom: 5.0,
-                        top: 10.0),
-                  ),
-                  Container(
-                    child: Theme(
-                      data: Theme.of(context)
-                          .copyWith(
-                              primaryColor:
-                                  primaryColor),
-                      child: TextField(
-                        enabled: false,
-                        decoration:
-                            InputDecoration(
-                          hintText: 'Sweetie',
-                          contentPadding:
-                              EdgeInsets.all(5.0),
-                          hintStyle: TextStyle(
-                              color: greyColor),
+                            controller:
+                                controllerNickname,
+                            onChanged: (value) {
+                              nickname = value;
+                            },
+                            focusNode:
+                                focusNodeNickname,
+                          ),
                         ),
-                        controller:
-                            controllerNickname,
-                        onChanged: (value) {
-                          nickname = value;
-                        },
-                        focusNode:
-                            focusNodeNickname,
+                        margin: EdgeInsets.only(
+                            left: 30.0,
+                            right: 30.0),
                       ),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 30.0, right: 30.0),
-                  ),
 
-                  Container(
-                    child: Text(
-                      'Status',
-                      style: TextStyle(
-                          fontStyle:
-                              FontStyle.italic,
-                          fontWeight:
-                              FontWeight.bold,
-                          color: primaryColor),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 10.0,
-                        top: 30.0,
-                        bottom: 5.0),
-                  ),
-                  Container(
-                    child: Theme(
-                      data: Theme.of(context)
-                          .copyWith(
-                              primaryColor:
+                      Container(
+                        child: Text(
+                          'Status',
+                          style: TextStyle(
+                              fontStyle: FontStyle
+                                  .italic,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
                                   primaryColor),
-                      child: TextField(
-                        enabled: false,
-                        decoration:
-                            InputDecoration(
-                          hintText: 'Offline',
-                          contentPadding:
-                              EdgeInsets.all(5.0),
-                          hintStyle: TextStyle(
-                              color: greyColor),
                         ),
-                        controller:
-                            controllerStatus,
-                        onChanged: (value) {},
-                        focusNode:
-                            focusNodeAboutMe,
+                        margin: EdgeInsets.only(
+                            left: 10.0,
+                            top: 30.0,
+                            bottom: 5.0),
                       ),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 30.0, right: 30.0),
-                  ),
+                      Container(
+                        child: Theme(
+                          data: Theme.of(context)
+                              .copyWith(
+                                  primaryColor:
+                                      primaryColor),
+                          child: TextField(
+                            enabled: false,
+                            decoration:
+                                InputDecoration(
+                              hintText: 'Offline',
+                              contentPadding:
+                                  EdgeInsets.all(
+                                      5.0),
+                              hintStyle: TextStyle(
+                                  color:
+                                      greyColor),
+                            ),
+                            controller:
+                                controllerStatus,
+                            onChanged: (value) {},
+                            focusNode:
+                                focusNodeAboutMe,
+                          ),
+                        ),
+                        margin: EdgeInsets.only(
+                            left: 30.0,
+                            right: 30.0),
+                      ),
 
-                  // About me
-                  Container(
-                    child: Text(
-                      'About me',
-                      style: TextStyle(
-                          fontStyle:
-                              FontStyle.italic,
-                          fontWeight:
-                              FontWeight.bold,
-                          color: primaryColor),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 10.0,
-                        top: 30.0,
-                        bottom: 5.0),
-                  ),
-                  Container(
-                    child: Theme(
-                      data: Theme.of(context)
-                          .copyWith(
-                              primaryColor:
+                      // About me
+                      Container(
+                        child: Text(
+                          'About me',
+                          style: TextStyle(
+                              fontStyle: FontStyle
+                                  .italic,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
                                   primaryColor),
-                      child: TextField(
-                        enabled: false,
-                        decoration:
-                            InputDecoration(
-                          hintText:
-                              'Personal description',
-                          contentPadding:
-                              EdgeInsets.all(5.0),
-                          hintStyle: TextStyle(
-                              color: greyColor),
                         ),
-                        controller:
-                            controllerAboutMe,
-                        onChanged: (value) {
-                          aboutMe = value;
-                        },
-                        focusNode:
-                            focusNodeAboutMe,
+                        margin: EdgeInsets.only(
+                            left: 10.0,
+                            top: 30.0,
+                            bottom: 5.0),
                       ),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 30.0, right: 30.0),
-                  ),
+                      Container(
+                        child: Theme(
+                          data: Theme.of(context)
+                              .copyWith(
+                                  primaryColor:
+                                      primaryColor),
+                          child: TextField(
+                            enabled: false,
+                            decoration:
+                                InputDecoration(
+                              hintText:
+                                  'Personal description',
+                              contentPadding:
+                                  EdgeInsets.all(
+                                      5.0),
+                              hintStyle: TextStyle(
+                                  color:
+                                      greyColor),
+                            ),
+                            controller:
+                                controllerAboutMe,
+                            onChanged: (value) {
+                              aboutMe = value;
+                            },
+                            focusNode:
+                                focusNodeAboutMe,
+                          ),
+                        ),
+                        margin: EdgeInsets.only(
+                            left: 30.0,
+                            right: 30.0),
+                      ),
 
-                  // Email
-                  Container(
-                    child: Text(
-                      'Email',
-                      style: TextStyle(
-                          fontStyle:
-                              FontStyle.italic,
-                          fontWeight:
-                              FontWeight.bold,
-                          color: primaryColor),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 10.0,
-                        top: 30.0,
-                        bottom: 5.0),
-                  ),
-                  Container(
-                    child: Theme(
-                      data: Theme.of(context)
-                          .copyWith(
-                              primaryColor:
+                      // Email
+                      Container(
+                        child: Text(
+                          'Email',
+                          style: TextStyle(
+                              fontStyle: FontStyle
+                                  .italic,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
                                   primaryColor),
-                      child: TextField(
-                        enabled: false,
-                        decoration:
-                            InputDecoration(
-                          hintText:
-                              'example@gmail.com',
-                          contentPadding:
-                              EdgeInsets.all(5.0),
-                          hintStyle: TextStyle(
-                              color: greyColor),
                         ),
-                        controller:
-                            controllerEmail,
-                        onChanged: (value) {
-                          aboutMe = value;
-                        },
-                        focusNode:
-                            focusNodeAboutMe,
+                        margin: EdgeInsets.only(
+                            left: 10.0,
+                            top: 30.0,
+                            bottom: 5.0),
                       ),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 30.0, right: 30.0),
-                  ),
+                      Container(
+                        child: Theme(
+                          data: Theme.of(context)
+                              .copyWith(
+                                  primaryColor:
+                                      primaryColor),
+                          child: TextField(
+                            enabled: false,
+                            decoration:
+                                InputDecoration(
+                              hintText:
+                                  'example@gmail.com',
+                              contentPadding:
+                                  EdgeInsets.all(
+                                      5.0),
+                              hintStyle: TextStyle(
+                                  color:
+                                      greyColor),
+                            ),
+                            controller:
+                                controllerEmail,
+                            onChanged: (value) {
+                              aboutMe = value;
+                            },
+                            focusNode:
+                                focusNodeAboutMe,
+                          ),
+                        ),
+                        margin: EdgeInsets.only(
+                            left: 30.0,
+                            right: 30.0),
+                      ),
 
-                  /*
+                      /*
                   //Latitude
                   Container(
                     child: Text(
@@ -608,85 +794,89 @@ class SettingsScreenState
                   ),
                   */
 
-                  //Distance
-                  Container(
-                    child: Text(
-                      'Distance',
-                      style: TextStyle(
-                          fontStyle:
-                              FontStyle.italic,
-                          fontWeight:
-                              FontWeight.bold,
-                          color: primaryColor),
-                    ),
-                    margin: EdgeInsets.only(
-                        left: 10.0,
-                        top: 30.0,
-                        bottom: 5.0),
-                  ),
-                  Container(
-                    child: Theme(
-                      data: Theme.of(context)
-                          .copyWith(
-                              primaryColor:
+                      //Distance
+                      Container(
+                        child: Text(
+                          'Distance',
+                          style: TextStyle(
+                              fontStyle: FontStyle
+                                  .italic,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
                                   primaryColor),
-                      child: TextField(
-                        enabled: false,
-                        decoration:
-                            InputDecoration(
-                          hintText: '0.70km',
-                          contentPadding:
-                              EdgeInsets.all(5.0),
-                          hintStyle: TextStyle(
-                              color: greyColor),
                         ),
-                        controller:
-                            controllerDistance,
-                        onChanged: (value) {
-                          aboutMe = value;
-                        },
-                        focusNode:
-                            focusNodeAboutMe,
+                        margin: EdgeInsets.only(
+                            left: 10.0,
+                            top: 30.0,
+                            bottom: 5.0),
                       ),
-                    ),
+                      Container(
+                        child: Theme(
+                          data: Theme.of(context)
+                              .copyWith(
+                                  primaryColor:
+                                      primaryColor),
+                          child: TextField(
+                            enabled: false,
+                            decoration:
+                                InputDecoration(
+                              hintText: '0.70km',
+                              contentPadding:
+                                  EdgeInsets.all(
+                                      5.0),
+                              hintStyle: TextStyle(
+                                  color:
+                                      greyColor),
+                            ),
+                            controller:
+                                controllerDistance,
+                            onChanged: (value) {
+                              aboutMe = value;
+                            },
+                            focusNode:
+                                focusNodeAboutMe,
+                          ),
+                        ),
+                        margin: EdgeInsets.only(
+                            left: 30.0,
+                            right: 30.0),
+                      ),
+                    ],
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                  ),
+
+                  // Button
+                  Container(
+                    child: Text(''),
                     margin: EdgeInsets.only(
-                        left: 30.0, right: 30.0),
+                        top: 50.0, bottom: 50.0),
                   ),
                 ],
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
               ),
+              padding: EdgeInsets.only(
+                  left: 15.0, right: 15.0),
+            ),
 
-              // Button
-              Container(
-                child: Text(''),
-                margin: EdgeInsets.only(
-                    top: 50.0, bottom: 50.0),
-              ),
-            ],
-          ),
-          padding: EdgeInsets.only(
-              left: 15.0, right: 15.0),
-        ),
-
-        // Loading
-        Positioned(
-          child: isLoading
-              ? Container(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                        valueColor:
-                            AlwaysStoppedAnimation<
-                                    Color>(
-                                themeColor)),
-                  ),
-                  color: Colors.white
-                      .withOpacity(0.8),
-                )
-              : Container(),
-        ),
-      ],
-    );
+            // Loading
+            Positioned(
+              child: isLoading
+                  ? Container(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                            valueColor:
+                                AlwaysStoppedAnimation<
+                                        Color>(
+                                    themeColor)),
+                      ),
+                      color: Colors.white
+                          .withOpacity(0.8),
+                    )
+                  : Container(),
+            ),
+          ],
+        ));
   }
 
   customHandler(IconData icon) {
@@ -701,4 +891,11 @@ class SettingsScreenState
       ),
     ));
   }
+}
+
+class Choice {
+  const Choice({this.title, this.icon});
+
+  final String title;
+  final IconData icon;
 }

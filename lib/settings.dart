@@ -315,7 +315,7 @@ class SettingsScreenState
                   // Username
                   Container(
                     child: Text(
-                      'Nickname',
+                      'Name',
                       style: TextStyle(
                           fontStyle:
                               FontStyle.italic,
@@ -424,39 +424,44 @@ class SettingsScreenState
                             .copyWith(
                                 primaryColor:
                                     primaryColor),
-                        child: FlutterSlider(
-                          values: [_lowerValue],
-                          max: 10,
-                          min: 0,
-                          tooltip:
-                              FlutterSliderTooltip(
-                            leftPrefix: Icon(
-                              Icons.attach_money,
-                              size: 19,
-                              color:
-                                  Colors.black45,
-                            ),
-                            rightSuffix:
-                                Text(" kms"),
-                            textStyle: TextStyle(
-                                fontSize: 17,
+                        child: Column(children: <
+                            Widget>[
+                          FlutterSlider(
+                            values: [_lowerValue],
+                            max: 10,
+                            min: 0,
+                            tooltip:
+                                FlutterSliderTooltip(
+                              leftPrefix: Icon(
+                                Icons
+                                    .attach_money,
+                                size: 19,
                                 color: Colors
-                                    .black45),
-                          ),
-                          handler: customHandler(
-                              Icons.flag_rounded),
-                          onDragging:
-                              (handlerIndex,
-                                  lowerValue,
-                                  upperValue) {
-                            _lowerValue =
-                                lowerValue;
-                            radius = lowerValue
-                                .round()
-                                .toInt();
-                            setState(() {});
-                          },
-                        )),
+                                    .black45,
+                              ),
+                              rightSuffix:
+                                  Text(" kms"),
+                              textStyle: TextStyle(
+                                  fontSize: 17,
+                                  color: Colors
+                                      .black45),
+                            ),
+                            handler: customHandler(
+                                Icons
+                                    .flag_rounded),
+                            onDragging:
+                                (handlerIndex,
+                                    lowerValue,
+                                    upperValue) {
+                              _lowerValue =
+                                  lowerValue;
+                              radius = lowerValue
+                                  .round()
+                                  .toInt();
+                              setState(() {});
+                            },
+                          )
+                        ])),
                     margin: EdgeInsets.only(
                         left: 15.0,
                         right: 15.0,
@@ -516,17 +521,27 @@ class SettingsScreenState
   customHandler(IconData icon) {
     return FlutterSliderHandler(
         decoration: BoxDecoration(),
-        child: Container(
-          padding:
-              const EdgeInsets.only(bottom: 60.0),
-          child: Container(
-            child: Icon(
-              icon,
-              color: Colors.red,
-              size: 38,
-            ),
-          ),
-        ));
+        child: Column(
+            mainAxisAlignment:
+                MainAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                width: 100,
+                height: 4,
+                padding: const EdgeInsets.only(
+                    bottom: 60.0),
+                margin: EdgeInsets.all(0),
+                child: Container(
+                  child: Icon(
+                    icon,
+                    color: Colors.red,
+                    size: 38,
+                  ),
+                ),
+              )
+            ]));
   }
 }
 

@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'dart:math' show cos, sqrt, asin;
 
+import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -16,8 +17,26 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:networkapp/map/user_profile.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/material.dart';
+import 'package:bubble/bubble.dart';
+import 'package:bubble/issue_clipper.dart';
+import 'package:flutter/painting.dart';
+import 'package:flutter_chat_bubble/bubble_type.dart';
+import 'package:flutter_chat_bubble/chat_bubble.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_1.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_10.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_2.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_3.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_4.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_5.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_6.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_7.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_8.dart';
+import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_9.dart';
 
 import 'main.dart';
 
@@ -59,6 +78,7 @@ class ChatS extends State<Chat> {
   var time;
   var lastSeenString;
   var data;
+  Position position;
   bool isTyping = false;
   SharedPreferences prefs;
 
@@ -77,6 +97,10 @@ class ChatS extends State<Chat> {
 
   readLocal() async {
     prefs = await SharedPreferences.getInstance();
+    position = await Geolocator()
+        .getCurrentPosition(
+            desiredAccuracy:
+                LocationAccuracy.high);
   }
 
   List<Choice> choices = <Choice>[
@@ -115,34 +139,97 @@ class ChatS extends State<Chat> {
         .doc(peerId)
         .get()
         .then((document) {
-      dateTime =
-          new DateTime.fromMicrosecondsSinceEpoch(
-              document
-                  .data()['lastSeen']['dateTime']
-                  .microsecondsSinceEpoch);
-      date = document.data()['lastSeen']['date'];
-      time = document.data()['lastSeen']['time'];
-      peerStatus = document.data()['status'];
-      if (document.data()['typingStatus']
-              ['typingTo'] ==
-          prefs.getString('id')) {
-        isTyping = document.data()['typingStatus']
-                    ['isTyping'] !=
-                null
-            ? document.data()['typingStatus']
-                ['isTyping']
-            : false;
+      if (document.data()['lastSeen'] != null) {
+        dateTime = new DateTime
+                .fromMicrosecondsSinceEpoch(
+            document
+                .data()['lastSeen']['dateTime']
+                .microsecondsSinceEpoch);
+        date =
+            document.data()['lastSeen']['date'];
+        time =
+            document.data()['lastSeen']['time'];
+        peerStatus = document.data()['status'];
+        if (document.data()['typingStatus']
+                ['typingTo'] ==
+            prefs.getString('id')) {
+          isTyping = document
+                          .data()['typingStatus']
+                      ['isTyping'] !=
+                  null
+              ? document.data()['typingStatus']
+                  ['isTyping']
+              : false;
+        }
       }
     });
-    date2 = DateTime.now();
-    diff = date2.difference(dateTime).inDays;
-    if (diff == 0) {
-      lastSeenString = "today at " + time;
-    } else if (diff == 1) {
-      lastSeenString = "yesterday at " + time;
-    } else {
-      lastSeenString = "on" + date;
+    if (dateTime != null) {
+      date2 = DateTime.now();
+      diff = date2.difference(dateTime).inDays;
+      if (diff == 0) {
+        lastSeenString = "today at " + time;
+      } else if (diff == 1) {
+        lastSeenString = "yesterday at " + time;
+      } else {
+        lastSeenString = "on " + date;
+      }
     }
+  }
+
+  double calculateDistance(
+      lat1, lon1, lat2, lon2) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 -
+        c((lat2 - lat1) * p) / 2 +
+        c(lat1 * p) *
+            c(lat2 * p) *
+            (1 - c((lon2 - lon1) * p)) /
+            2;
+    return 12742 * asin(sqrt(a));
+  }
+
+  gotoUserProfileScreen() async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(peerId)
+        .get()
+        .then((document) {
+      double dis = calculateDistance(
+          document
+              .data()['position']['geopoint']
+              .latitude,
+          document
+              .data()['position']['geopoint']
+              .longitude,
+          position.latitude,
+          position.longitude);
+      dis =
+          double.parse((dis).toStringAsFixed(3));
+      Map<String, dynamic> finalData = {
+        'latitude': document
+            .data()['position']['geopoint']
+            .latitude,
+        'longitude': document
+            .data()['position']['geopoint']
+            .longitude,
+        'name': document.data()['nickname'],
+        'photoUrl': document.data()['photoUrl'],
+        'email': document.data()['email'],
+        'aboutMe': document.data()['aboutMe'],
+        'status': document.data()['status'],
+        'distance': dis,
+        'id': document.data()['id']
+      };
+      FocusScope.of(context).unfocus();
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => UserProfile(
+                  data: finalData,
+                  currentUserId:
+                      prefs.getString('id'))));
+    });
   }
 
   @override
@@ -159,113 +246,131 @@ class ChatS extends State<Chat> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Row(
-            mainAxisAlignment:
-                MainAxisAlignment.start,
-            crossAxisAlignment:
-                CrossAxisAlignment.center,
-            children: <Widget>[
-              Stack(children: <Widget>[
-                Material(
-                  child: peerAvatar != null
-                      ? CachedNetworkImage(
-                          placeholder:
-                              (context, url) =>
-                                  Container(
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 1.0,
-                              valueColor:
-                                  AlwaysStoppedAnimation<
-                                          Color>(
-                                      themeColor),
+        title: TextButton(
+            onPressed: () async {
+              gotoUserProfileScreen();
+            },
+            child: Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.center,
+                children: <Widget>[
+                  Stack(children: <Widget>[
+                    Material(
+                      child: peerAvatar != null
+                          ? CachedNetworkImage(
+                              placeholder:
+                                  (context,
+                                          url) =>
+                                      Container(
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth:
+                                      1.0,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<
+                                              Color>(
+                                          themeColor),
+                                ),
+                                width: 38.0,
+                                height: 38.0,
+                                padding: EdgeInsets
+                                    .only(
+                                        left: 0.0,
+                                        top: 15.0,
+                                        bottom:
+                                            15.0,
+                                        right:
+                                            15.0),
+                              ),
+                              imageUrl:
+                                  peerAvatar,
+                              width: 38.0,
+                              height: 38.0,
+                              fit: BoxFit.cover,
+                            )
+                          : Icon(
+                              Icons
+                                  .account_circle,
+                              size: 50.0,
+                              color: greyColor,
                             ),
-                            width: 38.0,
-                            height: 38.0,
-                            padding:
-                                EdgeInsets.only(
-                                    left: 0.0,
-                                    top: 15.0,
-                                    bottom: 15.0,
-                                    right: 15.0),
-                          ),
-                          imageUrl: peerAvatar,
-                          width: 38.0,
-                          height: 38.0,
-                          fit: BoxFit.cover,
-                        )
-                      : Icon(
-                          Icons.account_circle,
-                          size: 50.0,
-                          color: greyColor,
-                        ),
-                  borderRadius: BorderRadius.all(
-                      Radius.circular(25.0)),
-                  clipBehavior: Clip.hardEdge,
-                ),
-                new Positioned(
-                  right: 0.0,
-                  bottom: 0.0,
-                  child: new Icon(Icons.circle,
-                      size: 14,
-                      color:
-                          peerStatus == "online"
+                      borderRadius:
+                          BorderRadius.all(
+                              Radius.circular(
+                                  25.0)),
+                      clipBehavior: Clip.hardEdge,
+                    ),
+                    new Positioned(
+                      right: 0.0,
+                      bottom: 0.0,
+                      child: new Icon(
+                          Icons.circle,
+                          size: 14,
+                          color: peerStatus ==
+                                  "online"
                               ? Colors.green
                               : Colors.black54),
-                ),
-              ]),
-              lastSeenString != null
-                  ? Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
-                      children: [
-                          Text(
-                            peerName != null
-                                ? "   " + peerName
-                                : 'CHAT',
-                            style: TextStyle(
-                                color:
-                                    primaryColor,
-                                fontWeight:
-                                    FontWeight
-                                        .bold),
-                          ),
-                          Container(
-                              child: Text(
-                            peerStatus == "online"
-                                ? isTyping
-                                    ? "      " +
-                                        "typing...."
-                                    : "      " +
+                    ),
+                  ]),
+                  lastSeenString != null
+                      ? Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment
+                                  .start,
+                          children: [
+                              Text(
+                                peerName != null
+                                    ? "   " +
+                                        peerName
+                                    : 'CHAT',
+                                style: TextStyle(
+                                    color:
+                                        primaryColor,
+                                    fontWeight:
+                                        FontWeight
+                                            .bold),
+                              ),
+                              Container(
+                                  child: Text(
+                                peerStatus ==
                                         "online"
-                                : lastSeenString !=
-                                        null
-                                    ? "      " +
-                                        "last seen " +
-                                        lastSeenString
-                                    : "",
-                            style: TextStyle(
+                                    ? isTyping
+                                        ? "    " +
+                                            "typing...."
+                                        : "    " +
+                                            "online"
+                                    : lastSeenString !=
+                                            null
+                                        ? "    " +
+                                            "last seen " +
+                                            lastSeenString
+                                        : "",
+                                style: TextStyle(
+                                  color:
+                                      primaryColor,
+                                  fontWeight:
+                                      FontWeight
+                                          .normal,
+                                  fontStyle:
+                                      FontStyle
+                                          .italic,
+                                  fontSize: 11.0,
+                                ),
+                              )),
+                            ])
+                      : Text(
+                          peerName != null
+                              ? "   " + peerName
+                              : '   CHAT',
+                          style: TextStyle(
                               color: primaryColor,
                               fontWeight:
                                   FontWeight
-                                      .normal,
-                              fontStyle: FontStyle
-                                  .italic,
-                              fontSize: 11.0,
-                            ),
-                          )),
-                        ])
-                  : Text(
-                      peerName != null
-                          ? "   " + peerName
-                          : '   CHAT',
-                      style: TextStyle(
-                          color: primaryColor,
-                          fontWeight:
-                              FontWeight.bold),
-                    ),
-            ]),
+                                      .bold),
+                        ),
+                ])),
         centerTitle: false,
         actions: <Widget>[
           PopupMenuButton<Choice>(
@@ -336,7 +441,7 @@ class ChatScreenState extends State<ChatScreen> {
   final int _limitIncrement = 20;
   String groupChatId;
   SharedPreferences prefs;
-
+  Position position;
   File imageFile;
   bool isLoading;
   bool isShowSticker;
@@ -415,6 +520,11 @@ class ChatScreenState extends State<ChatScreen> {
         .doc(id)
         .update({'chattingWith': peerId});
 
+    position = await Geolocator()
+        .getCurrentPosition(
+            desiredAccuracy:
+                LocationAccuracy.high);
+
     setState(() {});
   }
 
@@ -470,12 +580,58 @@ class ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void onSendMessage(String content, int type) {
+  void onSendMessage(
+      String content, int type) async {
     // type: 0 = text, 1 = image, 2 = sticker
     if (content.trim() != '') {
       textEditingController.clear();
 
+      DateTime now = DateTime.now();
+      DateFormat formatter =
+          DateFormat('dd-MM-yyyy');
+      String dateToday = formatter.format(now);
+      String dateLastMsg = '';
+      Fluttertoast.showToast(
+          msg: msgCount != null
+              ? msgCount.toString()
+              : '0');
+      if (listMessage.length != 0) {
+        DateTime dTimeLastMsg = new DateTime
+                .fromMillisecondsSinceEpoch(
+            int.parse(listMessage[0]
+                .data()['timestamp']));
+        dateLastMsg =
+            formatter.format(dTimeLastMsg);
+      }
+
       var documentReference = FirebaseFirestore
+          .instance
+          .collection('messages')
+          .doc(groupChatId)
+          .collection(groupChatId)
+          .doc(now.millisecondsSinceEpoch
+              .toString());
+
+      if (dateLastMsg != dateToday ||
+          msgCount == null) {
+        await FirebaseFirestore.instance
+            .runTransaction((transaction) async {
+          transaction.set(
+            documentReference,
+            {
+              'idFrom': id,
+              'idTo': peerId,
+              'timestamp': now
+                  .millisecondsSinceEpoch
+                  .toString(),
+              'content': dateToday,
+              'type': 10
+            },
+          );
+        });
+      }
+
+      documentReference = FirebaseFirestore
           .instance
           .collection('messages')
           .doc(groupChatId)
@@ -575,139 +731,294 @@ class ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  double calculateDistance(
+      lat1, lon1, lat2, lon2) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 -
+        c((lat2 - lat1) * p) / 2 +
+        c(lat1 * p) *
+            c(lat2 * p) *
+            (1 - c((lon2 - lon1) * p)) /
+            2;
+    return 12742 * asin(sqrt(a));
+  }
+
+  gotoUserProfileScreen() async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(peerId)
+        .get()
+        .then((document) {
+      double dis = calculateDistance(
+          document
+              .data()['position']['geopoint']
+              .latitude,
+          document
+              .data()['position']['geopoint']
+              .longitude,
+          position.latitude,
+          position.longitude);
+      dis =
+          double.parse((dis).toStringAsFixed(3));
+      Map<String, dynamic> finalData = {
+        'latitude': document
+            .data()['position']['geopoint']
+            .latitude,
+        'longitude': document
+            .data()['position']['geopoint']
+            .longitude,
+        'name': document.data()['nickname'],
+        'photoUrl': document.data()['photoUrl'],
+        'email': document.data()['email'],
+        'aboutMe': document.data()['aboutMe'],
+        'status': document.data()['status'],
+        'distance': dis,
+        'id': document.data()['id']
+      };
+      FocusScope.of(context).unfocus();
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => UserProfile(
+                  data: finalData,
+                  currentUserId:
+                      prefs.getString('id'))));
+    });
+  }
+
+  getSenderView(CustomClipper clipper,
+      BuildContext context, String bubbleText) {
+    /*
+    return ChatBubble(
+      clipper: clipper,
+      alignment: Alignment.topCenter,
+      margin: EdgeInsets.only(top: 3, bottom: 8),
+      backGroundColor: Colors.blue,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth:
+              MediaQuery.of(context).size.width *
+                  0.7,
+        ),
+        child: Text(
+          bubbleText,
+          style: TextStyle(
+              color: Colors.white, fontSize: 10),
+        ),
+      ),
+    );
+    */
+    return Container(
+        child: Bubble(
+          alignment: Alignment.center,
+          color:
+              Color.fromRGBO(212, 234, 244, 1.0),
+          child: Text(bubbleText,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.0)),
+        ),
+        margin:
+            EdgeInsets.only(top: 12, bottom: 12));
+  }
+
+  String datePrevMsg = '';
+  String contentPrevMsg = '';
+
   Widget buildItem(
       int index, DocumentSnapshot document) {
+    var bubbleText = '';
+
+    /*
+    DateTime dTimeMsg = new DateTime
+            .fromMillisecondsSinceEpoch(
+        int.parse(document.data()['timestamp']));
+    String dateMsg = formatter.format(dTimeMsg);
+
+    if (index > 0) {
+      if (datePrevMsg != dateMsg) {
+        showBubble = true;
+        if (datePrevMsg == dateToday) {
+          bubbleText = 'Today';
+        } else {
+          bubbleText = datePrevMsg;
+        }
+      }
+    }
+    //bubbleText = contentPrevMsg;
+    //showBubble = true;
+
+    DateTime dTimePrevMsg = new DateTime
+            .fromMillisecondsSinceEpoch(
+        int.parse(document.data()['timestamp']));
+    datePrevMsg = formatter.format(dTimePrevMsg);
+    contentPrevMsg = document.data()['content'];
+    */
+
+    if (document.data()['type'] == 10) {
+      DateFormat formatter =
+          DateFormat('dd-MM-yyyy');
+
+      DateTime now = DateTime.now();
+      String dateToday = formatter.format(now);
+
+      if (dateToday ==
+          document.data()['content']) {
+        bubbleText = 'TODAY';
+      } else {
+        bubbleText = document.data()['content'];
+      }
+
+      return getSenderView(
+          ChatBubbleClipper4(
+              type: BubbleType.sendBubble),
+          context,
+          bubbleText);
+    }
+
     if (document.data()['idFrom'] == id) {
       // Right (my message)
-      return Row(
-        children: <Widget>[
-          document.data()['type'] == 0
-              // Text
-              ? Container(
-                  child: Text(
-                    document.data()['content'],
-                    style: TextStyle(
-                        color: primaryColor),
-                  ),
-                  padding: EdgeInsets.fromLTRB(
-                      15.0, 10.0, 15.0, 10.0),
-                  width: 200.0,
-                  decoration: BoxDecoration(
-                      color: greyColor2,
-                      borderRadius:
-                          BorderRadius.circular(
-                              8.0)),
-                  margin: EdgeInsets.only(
-                      bottom: isLastMessageRight(
-                              index)
-                          ? 20.0
-                          : 10.0,
-                      right: 10.0),
-                )
-              : document.data()['type'] == 1
-                  // Image
-                  ? Container(
-                      child: FlatButton(
-                        child: Material(
-                          child:
-                              CachedNetworkImage(
-                            placeholder:
-                                (context, url) =>
-                                    Container(
-                              child:
-                                  CircularProgressIndicator(
-                                valueColor:
-                                    AlwaysStoppedAnimation<
-                                            Color>(
-                                        themeColor),
+      return Column(children: <Widget>[
+        Row(
+          children: <Widget>[
+            document.data()['type'] == 0
+                // Text
+                ? Container(
+                    child: Text(
+                      document.data()['content'],
+                      style: TextStyle(
+                          color: primaryColor),
+                    ),
+                    padding: EdgeInsets.fromLTRB(
+                        15.0, 10.0, 15.0, 10.0),
+                    width: 200.0,
+                    decoration: BoxDecoration(
+                        color: greyColor2,
+                        borderRadius:
+                            BorderRadius.circular(
+                                8.0)),
+                    margin: EdgeInsets.only(
+                        bottom:
+                            isLastMessageRight(
+                                    index)
+                                ? 20.0
+                                : 10.0,
+                        right: 10.0),
+                  )
+                : document.data()['type'] == 1
+                    // Image
+                    ? Container(
+                        child: FlatButton(
+                          child: Material(
+                            child:
+                                CachedNetworkImage(
+                              placeholder:
+                                  (context,
+                                          url) =>
+                                      Container(
+                                child:
+                                    CircularProgressIndicator(
+                                  valueColor:
+                                      AlwaysStoppedAnimation<
+                                              Color>(
+                                          themeColor),
+                                ),
+                                width: 200.0,
+                                height: 200.0,
+                                padding:
+                                    EdgeInsets
+                                        .all(
+                                            70.0),
+                                decoration:
+                                    BoxDecoration(
+                                  color:
+                                      greyColor2,
+                                  borderRadius:
+                                      BorderRadius
+                                          .all(
+                                    Radius
+                                        .circular(
+                                            8.0),
+                                  ),
+                                ),
                               ),
-                              width: 200.0,
-                              height: 200.0,
-                              padding:
-                                  EdgeInsets.all(
-                                      70.0),
-                              decoration:
-                                  BoxDecoration(
-                                color: greyColor2,
+                              errorWidget:
+                                  (context, url,
+                                          error) =>
+                                      Material(
+                                child:
+                                    Image.asset(
+                                  'images/img_not_available.jpeg',
+                                  width: 200.0,
+                                  height: 200.0,
+                                  fit: BoxFit
+                                      .cover,
+                                ),
                                 borderRadius:
                                     BorderRadius
                                         .all(
                                   Radius.circular(
                                       8.0),
                                 ),
+                                clipBehavior:
+                                    Clip.hardEdge,
                               ),
+                              imageUrl:
+                                  document.data()[
+                                      'content'],
+                              width: 200.0,
+                              height: 200.0,
+                              fit: BoxFit.cover,
                             ),
-                            errorWidget: (context,
-                                    url, error) =>
-                                Material(
-                              child: Image.asset(
-                                'images/img_not_available.jpeg',
-                                width: 200.0,
-                                height: 200.0,
-                                fit: BoxFit.cover,
-                              ),
-                              borderRadius:
-                                  BorderRadius
-                                      .all(
-                                Radius.circular(
-                                    8.0),
-                              ),
-                              clipBehavior:
-                                  Clip.hardEdge,
-                            ),
-                            imageUrl:
-                                document.data()[
-                                    'content'],
-                            width: 200.0,
-                            height: 200.0,
-                            fit: BoxFit.cover,
+                            borderRadius:
+                                BorderRadius.all(
+                                    Radius
+                                        .circular(
+                                            8.0)),
+                            clipBehavior:
+                                Clip.hardEdge,
                           ),
-                          borderRadius:
-                              BorderRadius.all(
-                                  Radius.circular(
-                                      8.0)),
-                          clipBehavior:
-                              Clip.hardEdge,
+                          onPressed: () {
+                            Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) =>
+                                        FullPhoto(
+                                            url: document
+                                                .data()['content'])));
+                          },
+                          padding:
+                              EdgeInsets.all(0),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => FullPhoto(
-                                      url: document
-                                              .data()[
-                                          'content'])));
-                        },
-                        padding:
-                            EdgeInsets.all(0),
+                        margin: EdgeInsets.only(
+                            bottom:
+                                isLastMessageRight(
+                                        index)
+                                    ? 20.0
+                                    : 10.0,
+                            right: 10.0),
+                      )
+                    // Sticker
+                    : Container(
+                        child: Image.asset(
+                          'images/${document.data()['content']}.gif',
+                          width: 100.0,
+                          height: 100.0,
+                          fit: BoxFit.cover,
+                        ),
+                        margin: EdgeInsets.only(
+                            bottom:
+                                isLastMessageRight(
+                                        index)
+                                    ? 20.0
+                                    : 10.0,
+                            right: 10.0),
                       ),
-                      margin: EdgeInsets.only(
-                          bottom:
-                              isLastMessageRight(
-                                      index)
-                                  ? 20.0
-                                  : 10.0,
-                          right: 10.0),
-                    )
-                  // Sticker
-                  : Container(
-                      child: Image.asset(
-                        'images/${document.data()['content']}.gif',
-                        width: 100.0,
-                        height: 100.0,
-                        fit: BoxFit.cover,
-                      ),
-                      margin: EdgeInsets.only(
-                          bottom:
-                              isLastMessageRight(
-                                      index)
-                                  ? 20.0
-                                  : 10.0,
-                          right: 10.0),
-                    ),
-        ],
-        mainAxisAlignment: MainAxisAlignment.end,
-      );
+          ],
+          mainAxisAlignment:
+              MainAxisAlignment.end,
+        ),
+      ]);
     } else {
       // Left (peer message)
       return Container(
@@ -730,7 +1041,7 @@ class ChatScreenState extends State<ChatScreen> {
                       width: 35.0,
                       height: 35.0,
                       padding:
-                          EdgeInsets.all(10.0),
+                          EdgeInsets.all(0.0),
                     ),
                     imageUrl: peerAvatar,
                     width: 35.0,
@@ -896,7 +1207,7 @@ class ChatScreenState extends State<ChatScreen> {
                         top: 5.0,
                         bottom: 5.0),
                   )
-                : Container()
+                : Container(),
           ],
           crossAxisAlignment:
               CrossAxisAlignment.start,
