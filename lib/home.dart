@@ -84,6 +84,8 @@ class HomeScreenState extends State<HomeScreen>
   final _firestore = FirebaseFirestore.instance;
   var data;
   var x = 2;
+  var statusList;
+  var dTimeLabel;
   var notificationTitle;
   var notificationMsg;
   var channelIdVOIP;
@@ -973,8 +975,13 @@ class HomeScreenState extends State<HomeScreen>
           context,
           MaterialPageRoute(
               builder: (context) => StatusPage(
-                  avatar: prefs
-                      .getString('photoUrl'))));
+                    avatar: prefs
+                        .getString('photoUrl'),
+                    currentUserId:
+                        prefs.getString('id'),
+                    statusList: statusList,
+                    dTimeLabel: dTimeLabel,
+                  )));
     } else {
       setState(() {
         data = 2;
@@ -1297,6 +1304,46 @@ class HomeScreenState extends State<HomeScreen>
     pos = await Geolocator().getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
     username = prefs.getString('nickname');
+
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get()
+        .then((document) {
+      statusList = document.data()['statusList'];
+      if (statusList == null) {
+        statusList = new List.from([]);
+      }
+      if (document.data()['statusList'] != null) {
+        if (document
+                .data()['statusList']
+                .length !=
+            0) {
+          var dateTime = new DateTime
+                  .fromMicrosecondsSinceEpoch(
+              statusList[statusList.length - 1]
+                      ['time']
+                  .microsecondsSinceEpoch);
+          DateFormat formatter =
+              DateFormat('dd-MM-yyyy');
+          var today =
+              formatter.format(DateTime.now());
+          String date =
+              formatter.format(dateTime);
+          var time =
+              DateFormat.jm().format(dateTime);
+
+          if (today == date) {
+            dTimeLabel =
+                "Today at " + time.toString();
+          } else {
+            dTimeLabel = date.toString() +
+                " " +
+                time.toString();
+          }
+        }
+      }
+    });
 
     /*
     await FirebaseFirestore.instance

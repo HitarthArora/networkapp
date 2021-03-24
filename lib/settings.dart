@@ -382,7 +382,7 @@ class SettingsScreenState
                         decoration:
                             InputDecoration(
                           hintText:
-                              'Fun, like travel and play PES...',
+                              'Personal description',
                           contentPadding:
                               EdgeInsets.all(5.0),
                           hintStyle: TextStyle(
@@ -532,7 +532,7 @@ class SettingsScreenState
                 height: 4,
                 padding: const EdgeInsets.only(
                     bottom: 60.0),
-                margin: EdgeInsets.all(0),
+                margin: EdgeInsets.only(top:10),
                 child: Container(
                   child: Icon(
                     icon,
