@@ -13,12 +13,15 @@ import 'package:networkapp/widget/full_photo.dart';
 import 'package:networkapp/widget/loading.dart';
 import 'package:networkapp/voip/video/main.dart';
 import 'package:networkapp/voip/audio/main.dart';
+import 'package:networkapp/widget/message_reply/message_reply_widget.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:networkapp/map/user_profile.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:clipboard/clipboard.dart';
+import 'package:simple_gesture_detector/simple_gesture_detector.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -405,6 +408,7 @@ class ChatS extends State<Chat> {
       body: ChatScreen(
         peerId: peerId,
         peerAvatar: peerAvatar,
+        peerName: peerName,
       ),
     );
   }
@@ -413,27 +417,33 @@ class ChatS extends State<Chat> {
 class ChatScreen extends StatefulWidget {
   final String peerId;
   final String peerAvatar;
+  final String peerName;
 
   ChatScreen(
       {Key key,
       @required this.peerId,
-      @required this.peerAvatar})
+      @required this.peerAvatar,
+      this.peerName})
       : super(key: key);
 
   @override
   State createState() => ChatScreenState(
-      peerId: peerId, peerAvatar: peerAvatar);
+      peerId: peerId,
+      peerAvatar: peerAvatar,
+      peerName: peerName);
 }
 
 class ChatScreenState extends State<ChatScreen> {
   ChatScreenState(
       {Key key,
       @required this.peerId,
-      @required this.peerAvatar});
+      @required this.peerAvatar,
+      this.peerName});
 
   String peerId;
   String peerAvatar;
   String id;
+  String peerName;
 
   List<QueryDocumentSnapshot> listMessage =
       new List.from([]);
@@ -448,6 +458,13 @@ class ChatScreenState extends State<ChatScreen> {
   String imageUrl;
   var msgCount;
   bool isComposing = false;
+  bool isReplying = false;
+  var replyMsg;
+  var replyingTo;
+  var replyingToId;
+  bool isSent = false;
+  bool isRead = false;
+  var _tapPosition;
 
   final TextEditingController
       textEditingController =
@@ -528,6 +545,12 @@ class ChatScreenState extends State<ChatScreen> {
     setState(() {});
   }
 
+  void cancelReply() {
+    setState(() {
+      isReplying = false;
+    });
+  }
+
   Future getImage() async {
     ImagePicker imagePicker = ImagePicker();
     PickedFile pickedFile;
@@ -591,10 +614,7 @@ class ChatScreenState extends State<ChatScreen> {
           DateFormat('dd-MM-yyyy');
       String dateToday = formatter.format(now);
       String dateLastMsg = '';
-      Fluttertoast.showToast(
-          msg: msgCount != null
-              ? msgCount.toString()
-              : '0');
+
       if (listMessage.length != 0) {
         DateTime dTimeLastMsg = new DateTime
                 .fromMillisecondsSinceEpoch(
@@ -631,35 +651,62 @@ class ChatScreenState extends State<ChatScreen> {
         });
       }
 
+      DateTime noww = DateTime.now();
+
       documentReference = FirebaseFirestore
           .instance
           .collection('messages')
           .doc(groupChatId)
           .collection(groupChatId)
-          .doc(DateTime.now()
-              .millisecondsSinceEpoch
+          .doc(noww.millisecondsSinceEpoch
               .toString());
 
-      FirebaseFirestore.instance
-          .runTransaction((transaction) async {
-        transaction.set(
-          documentReference,
-          {
-            'idFrom': id,
-            'idTo': peerId,
-            'timestamp': DateTime.now()
-                .millisecondsSinceEpoch
-                .toString(),
-            'content': content,
-            'type': type
-          },
-        );
-      });
+      if (isReplying == true) {
+        FirebaseFirestore.instance
+            .runTransaction((transaction) async {
+          transaction.set(
+            documentReference,
+            {
+              'idFrom': id,
+              'idTo': peerId,
+              'timestamp': noww
+                  .millisecondsSinceEpoch
+                  .toString(),
+              'content': content,
+              'type': type,
+              'isReplyingMsg': true,
+              'replyingTo': replyingTo,
+              'replyingToId': replyingToId,
+              'replyMsg': replyMsg,
+            },
+          );
+        });
+      } else {
+        FirebaseFirestore.instance
+            .runTransaction((transaction) async {
+          transaction.set(
+            documentReference,
+            {
+              'idFrom': id,
+              'idTo': peerId,
+              'timestamp': noww
+                  .millisecondsSinceEpoch
+                  .toString(),
+              'content': content,
+              'type': type
+            },
+          );
+        });
+      }
       listScrollController.animateTo(0.0,
           duration: Duration(milliseconds: 300),
           curve: Curves.easeOut);
 
-      sendNotification(peerId, content);
+      sendNotification(
+          peerId,
+          content,
+          noww.millisecondsSinceEpoch.toString(),
+          groupChatId);
     } else {
       Fluttertoast.showToast(
           msg: 'Nothing to send',
@@ -683,7 +730,7 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> sendNotification(
-      receiver, msg) async {
+      receiver, msg, docId, groupChatId) async {
     var token = await getToken(receiver);
     print('receiver id: $peerId');
     print('token : $token');
@@ -705,6 +752,8 @@ class ChatScreenState extends State<ChatScreen> {
         "type": "messaging",
         "peerAvatar": prefs.getString('photoUrl'),
         "name": prefs.getString('nickname'),
+        "docId": docId,
+        "groupChatId": groupChatId,
       },
       "to": "$token",
       "apns": {
@@ -825,6 +874,42 @@ class ChatScreenState extends State<ChatScreen> {
   String datePrevMsg = '';
   String contentPrevMsg = '';
 
+  void _onSwipe(var idFrom, var message) {
+    setState(() {
+      print('Swiped!');
+      isReplying = true;
+      replyMsg = message;
+      if (idFrom == prefs.getString('id')) {
+        replyingTo = prefs.getString('nickname');
+        replyingToId = prefs.getString('id');
+      } else {
+        replyingTo = peerName;
+        replyingToId = peerId;
+      }
+    });
+  }
+
+  void _onTap(var idFrom, var message) {
+    setState(() {
+      print('Tapped!');
+      isReplying = true;
+      replyMsg = message;
+      if (idFrom == prefs.getString('id')) {
+        replyingTo = prefs.getString('nickname');
+        replyingToId = prefs.getString('id');
+      } else {
+        replyingTo = peerName;
+        replyingToId = peerId;
+      }
+    });
+  }
+
+  var messageToBubbleMap = {};
+
+  void _storePosition(TapDownDetails details) {
+    _tapPosition = details.globalPosition;
+  }
+
   Widget buildItem(
       int index, DocumentSnapshot document) {
     var bubbleText = '';
@@ -876,250 +961,628 @@ class ChatScreenState extends State<ChatScreen> {
           bubbleText);
     }
 
+    var messag = {
+      'message': document.data()['replyMsg'],
+      'username': document.data()['replyingTo'],
+    };
+
+    var dtTime = new DateTime
+            .fromMillisecondsSinceEpoch(
+        int.parse(document.data()['timestamp']));
+    var msggTime = DateFormat.jm().format(dtTime);
+
+    if (listMessage[index + 1] != null) {
+      if (listMessage[index + 1].data()['type'] ==
+          10) {
+        messageToBubbleMap[document
+                .data()['timestamp']
+                .toString()] =
+            listMessage[index + 1]
+                .data()['timestamp']
+                .toString();
+      }
+    }
+
     if (document.data()['idFrom'] == id) {
       // Right (my message)
-      return Column(children: <Widget>[
-        Row(
-          children: <Widget>[
-            document.data()['type'] == 0
-                // Text
-                ? Container(
-                    child: Text(
-                      document.data()['content'],
-                      style: TextStyle(
-                          color: primaryColor),
-                    ),
-                    padding: EdgeInsets.fromLTRB(
-                        15.0, 10.0, 15.0, 10.0),
-                    width: 200.0,
-                    decoration: BoxDecoration(
-                        color: greyColor2,
-                        borderRadius:
-                            BorderRadius.circular(
-                                8.0)),
-                    margin: EdgeInsets.only(
-                        bottom:
-                            isLastMessageRight(
-                                    index)
-                                ? 20.0
-                                : 10.0,
-                        right: 10.0),
-                  )
-                : document.data()['type'] == 1
-                    // Image
-                    ? Container(
-                        child: FlatButton(
-                          child: Material(
-                            child:
-                                CachedNetworkImage(
-                              placeholder:
-                                  (context,
-                                          url) =>
-                                      Container(
-                                child:
-                                    CircularProgressIndicator(
-                                  valueColor:
-                                      AlwaysStoppedAnimation<
-                                              Color>(
-                                          themeColor),
-                                ),
-                                width: 200.0,
-                                height: 200.0,
-                                padding:
-                                    EdgeInsets
-                                        .all(
-                                            70.0),
-                                decoration:
-                                    BoxDecoration(
-                                  color:
-                                      greyColor2,
-                                  borderRadius:
-                                      BorderRadius
-                                          .all(
-                                    Radius
-                                        .circular(
-                                            8.0),
+      if (document.data()['deleteForId-' +
+              prefs.getString('id')] !=
+          null) {
+        return Container();
+      } else if (document
+              .data()['deleteForAll'] !=
+          null) {
+        return GestureDetector(
+            onTapDown: _storePosition,
+            onLongPress: () {
+              final RenderBox overlay =
+                  Overlay.of(context)
+                      .context
+                      .findRenderObject();
+              showMenu(
+                  items: <PopupMenuEntry>[
+                    PopupMenuItem(
+                        value: 0,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(
+                                context);
+                            showDialog(
+                              context: context,
+                              builder: (_) =>
+                                  AlertDialog(
+                                title: Text(
+                                    'Delete message?'),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed:
+                                        () {
+                                      Navigator.pop(
+                                          context);
+                                      FirebaseFirestore
+                                          .instance
+                                          .collection(
+                                              'messages')
+                                          .doc(
+                                              groupChatId)
+                                          .collection(
+                                              groupChatId)
+                                          .doc(document
+                                              .data()['timestamp']
+                                              .toString())
+                                          .update({
+                                        'deleteForId-' +
+                                                prefs.getString('id'):
+                                            true,
+                                      });
+                                    },
+                                    child: const Text(
+                                        'DELETE FOR ME'),
                                   ),
-                                ),
+                                  TextButton(
+                                    onPressed:
+                                        () async {
+                                      Navigator.pop(
+                                          context);
+                                    },
+                                    child: const Text(
+                                        'CANCEL'),
+                                  )
+                                ],
                               ),
-                              errorWidget:
-                                  (context, url,
-                                          error) =>
-                                      Material(
-                                child:
-                                    Image.asset(
-                                  'images/img_not_available.jpeg',
-                                  width: 200.0,
-                                  height: 200.0,
-                                  fit: BoxFit
-                                      .cover,
-                                ),
+                            );
+                          },
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.delete,
+                                  color: Colors
+                                      .black),
+                              Text("Delete",
+                                  style: TextStyle(
+                                      color: Colors
+                                          .black)),
+                            ],
+                          ),
+                        )),
+                  ],
+                  context: context,
+                  position: RelativeRect.fromRect(
+                      _tapPosition &
+                          const Size(40,
+                              40), // smaller rect, the touch area
+                      Offset.zero &
+                          overlay
+                              .size // Bigger rect, the entire screen
+                      ));
+            },
+            child: ChatBubble(
+                clipper: ChatBubbleClipper1(
+                    type: BubbleType.sendBubble,
+                    radius: 5.0),
+                alignment: Alignment.topRight,
+                margin: EdgeInsets.only(top: 12),
+                backGroundColor:
+                    HexColor.fromHex('#DCF8C6'),
+                child: Container(
+                  child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      mainAxisAlignment:
+                          MainAxisAlignment.start,
+                      children: [
+                        Row(children: <Widget>[
+                          Icon(
+                              Icons
+                                  .do_disturb_outlined,
+                              color: Colors
+                                  .grey.shade600,
+                              size: 15),
+                          Text(
+                              ' You deleted this message',
+                              style: TextStyle(
+                                  color: Colors
+                                      .grey
+                                      .shade600,
+                                  fontStyle:
+                                      FontStyle
+                                          .italic))
+                        ]),
+                        Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment
+                                  .end,
+                          crossAxisAlignment:
+                              CrossAxisAlignment
+                                  .end,
+                          mainAxisSize:
+                              MainAxisSize.min,
+                          children: <Widget>[
+                            Container(
+                              margin:
+                                  EdgeInsets.only(
+                                      right: 0.0),
+                              width: 200.0,
+                              child: Row(
+                                mainAxisSize:
+                                    MainAxisSize
+                                        .min,
+                                mainAxisAlignment:
+                                    MainAxisAlignment
+                                        .end,
+                                children: <
+                                    Widget>[
+                                  Text(
+                                    msggTime
+                                        .toString(),
+                                    style:
+                                        TextStyle(
+                                      color: Colors
+                                          .grey,
+                                      fontSize:
+                                          12.0,
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 4.0,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      ]),
+                  padding: EdgeInsets.fromLTRB(
+                      0.0, 0.0, 0.0, 0.0),
+                  width: 200.0,
+                  decoration: BoxDecoration(
+                      color: HexColor.fromHex(
+                          '#DCF8C6'),
+                      borderRadius:
+                          BorderRadius.circular(
+                              6.0)),
+                  margin: EdgeInsets.only(
+                      bottom: isLastMessageRight(
+                              index)
+                          ? 0.0
+                          : 0.0,
+                      right: 5.0),
+                )));
+      } else {
+        return GestureDetector(
+            onPanUpdate: (details) {
+              if (details.delta.dx != 0) {
+                _onSwipe(
+                    document.data()['idFrom'],
+                    document.data()['content']);
+              }
+            },
+            onTapDown: _storePosition,
+            onLongPress: () {
+              final RenderBox overlay =
+                  Overlay.of(context)
+                      .context
+                      .findRenderObject();
+              showMenu(
+                  items: <PopupMenuEntry>[
+                    PopupMenuItem(
+                        value: 0,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(
+                                context);
+                            _onSwipe(
+                                document.data()[
+                                    'idFrom'],
+                                document.data()[
+                                    'content']);
+                          },
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.reply,
+                                  color: Colors
+                                      .black),
+                              Text("Reply",
+                                  style: TextStyle(
+                                      color: Colors
+                                          .black)),
+                            ],
+                          ),
+                        )),
+                    document.data()['type'] == 0
+                        ? PopupMenuItem(
+                            value: 0,
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.pop(
+                                    context);
+                                FlutterClipboard.copy(
+                                        document.data()[
+                                            'content'])
+                                    .then(
+                                        (value) {
+                                  print('copied');
+                                  Fluttertoast
+                                      .showToast(
+                                          msg:
+                                              'Copied');
+                                });
+                              },
+                              child: Row(
+                                children: <
+                                    Widget>[
+                                  Icon(
+                                      Icons
+                                          .content_copy,
+                                      color: Colors
+                                          .black),
+                                  Text("Copy",
+                                      style: TextStyle(
+                                          color: Colors
+                                              .black)),
+                                ],
+                              ),
+                            ))
+                        : Container(),
+                    PopupMenuItem(
+                        value: 0,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(
+                                context);
+                            showDialog(
+                              context: context,
+                              builder: (_) =>
+                                  AlertDialog(
+                                title: Text(
+                                    'Delete message?'),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed:
+                                        () {
+                                      Navigator.pop(
+                                          context);
+                                      FirebaseFirestore
+                                          .instance
+                                          .collection(
+                                              'messages')
+                                          .doc(
+                                              groupChatId)
+                                          .collection(
+                                              groupChatId)
+                                          .doc(document
+                                              .data()['timestamp']
+                                              .toString())
+                                          .update({
+                                        'deleteForId-' +
+                                                prefs.getString('id'):
+                                            true,
+                                      });
+
+                                      /*
+                                      if (messageToBubbleMap[document
+                                              .data()['timestamp']
+                                              .toString()] !=
+                                          null) {
+                                        FirebaseFirestore
+                                            .instance
+                                            .collection(
+                                                'messages')
+                                            .doc(
+                                                groupChatId)
+                                            .collection(
+                                                groupChatId)
+                                            .doc(messageToBubbleMap[document.data()['timestamp'].toString()]
+                                                .toString())
+                                            .update({
+                                          'deleteForId-' +
+                                                  prefs.getString('id'):
+                                              true,
+                                        }); 
+                                      }
+                                      */
+                                    },
+                                    child: const Text(
+                                        'DELETE FOR ME'),
+                                  ),
+                                  TextButton(
+                                    onPressed:
+                                        () async {
+                                      Navigator.pop(
+                                          context);
+                                      /*
+                                      var documentReference = FirebaseFirestore
+                                          .instance
+                                          .collection(
+                                              'messages')
+                                          .doc(
+                                              groupChatId)
+                                          .collection(
+                                              groupChatId)
+                                          .doc(document
+                                              .data()['timestamp']
+                                              .toString());
+                                      await FirebaseFirestore
+                                          .instance
+                                          .runTransaction((Transaction
+                                              myTransaction) async {
+                                        myTransaction
+                                            .delete(
+                                                documentReference);                      
+                                      });
+                                      */
+
+                                      FirebaseFirestore
+                                          .instance
+                                          .collection(
+                                              'messages')
+                                          .doc(
+                                              groupChatId)
+                                          .collection(
+                                              groupChatId)
+                                          .doc(document
+                                              .data()['timestamp']
+                                              .toString())
+                                          .update({
+                                        'deleteForAll':
+                                            true,
+                                      });
+                                    },
+                                    child: const Text(
+                                        'DELETE FOR EVERYONE'),
+                                  ),
+                                  TextButton(
+                                    onPressed:
+                                        () async {
+                                      Navigator.pop(
+                                          context);
+                                    },
+                                    child: const Text(
+                                        'CANCEL'),
+                                  )
+                                ],
+                              ),
+                            );
+                          },
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.delete,
+                                  color: Colors
+                                      .black),
+                              Text("Delete",
+                                  style: TextStyle(
+                                      color: Colors
+                                          .black)),
+                            ],
+                          ),
+                        )),
+                  ],
+                  context: context,
+                  position: RelativeRect.fromRect(
+                      _tapPosition &
+                          const Size(40,
+                              40), // smaller rect, the touch area
+                      Offset.zero &
+                          overlay
+                              .size // Bigger rect, the entire screen
+                      ));
+            },
+            onTap: () {
+              _onTap(document.data()['idFrom'],
+                  document.data()['content']);
+            },
+            child: Column(children: <Widget>[
+              Row(
+                children: <Widget>[
+                  document.data()['type'] == 0
+                      // Text
+                      ? ChatBubble(
+                          clipper:
+                              ChatBubbleClipper1(
+                                  type: BubbleType
+                                      .sendBubble,
+                                  radius: 5.0),
+                          alignment:
+                              Alignment.topRight,
+                          margin: EdgeInsets.only(
+                              top: 12),
+                          backGroundColor:
+                              HexColor.fromHex(
+                                  '#DCF8C6'),
+                          child: Container(
+                            child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment
+                                        .start,
+                                mainAxisAlignment:
+                                    MainAxisAlignment
+                                        .start,
+                                children: [
+                                  document.data()[
+                                              'isReplyingMsg'] !=
+                                          null
+                                      ? ReplyMessageWidget(
+                                          message:
+                                              messag)
+                                      : Container(),
+                                  document.data()[
+                                              'isReplyingMsg'] !=
+                                          null
+                                      ? SizedBox(
+                                          height:
+                                              10)
+                                      : Container(),
+                                  Text(
+                                    document.data()[
+                                        'content'],
+                                    style: TextStyle(
+                                        color:
+                                            primaryColor),
+                                  ),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment
+                                            .end,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment
+                                            .end,
+                                    mainAxisSize:
+                                        MainAxisSize
+                                            .min,
+                                    children: <
+                                        Widget>[
+                                      Container(
+                                        margin: EdgeInsets.only(
+                                            right:
+                                                0.0),
+                                        width:
+                                            200.0,
+                                        child:
+                                            Row(
+                                          mainAxisSize:
+                                              MainAxisSize.min,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: <
+                                              Widget>[
+                                            Text(
+                                              msggTime.toString(),
+                                              style:
+                                                  TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 12.0,
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width:
+                                                  4.0,
+                                            ),
+                                            _getIcon(
+                                                document.data()['isSent'] != null ? document.data()['isSent'] : false,
+                                                document.data()['isRead'] != null ? document.data()['isRead'] : false),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                ]),
+                            padding: EdgeInsets
+                                .fromLTRB(
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                    0.0),
+                            width: 200.0,
+                            decoration: BoxDecoration(
+                                color: HexColor
+                                    .fromHex(
+                                        '#DCF8C6'),
                                 borderRadius:
                                     BorderRadius
-                                        .all(
-                                  Radius.circular(
-                                      8.0),
-                                ),
-                                clipBehavior:
-                                    Clip.hardEdge,
-                              ),
-                              imageUrl:
-                                  document.data()[
-                                      'content'],
-                              width: 200.0,
-                              height: 200.0,
-                              fit: BoxFit.cover,
-                            ),
-                            borderRadius:
-                                BorderRadius.all(
-                                    Radius
                                         .circular(
-                                            8.0)),
-                            clipBehavior:
-                                Clip.hardEdge,
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        FullPhoto(
-                                            url: document
-                                                .data()['content'])));
-                          },
-                          padding:
-                              EdgeInsets.all(0),
-                        ),
-                        margin: EdgeInsets.only(
-                            bottom:
-                                isLastMessageRight(
-                                        index)
-                                    ? 20.0
-                                    : 10.0,
-                            right: 10.0),
-                      )
-                    // Sticker
-                    : Container(
-                        child: Image.asset(
-                          'images/${document.data()['content']}.gif',
-                          width: 100.0,
-                          height: 100.0,
-                          fit: BoxFit.cover,
-                        ),
-                        margin: EdgeInsets.only(
-                            bottom:
-                                isLastMessageRight(
-                                        index)
-                                    ? 20.0
-                                    : 10.0,
-                            right: 10.0),
-                      ),
-          ],
-          mainAxisAlignment:
-              MainAxisAlignment.end,
-        ),
-      ]);
-    } else {
-      // Left (peer message)
-      return Container(
-        child: Column(
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Material(
-                  child: CachedNetworkImage(
-                    placeholder: (context, url) =>
-                        Container(
-                      child:
-                          CircularProgressIndicator(
-                        strokeWidth: 1.0,
-                        valueColor:
-                            AlwaysStoppedAnimation<
-                                    Color>(
-                                themeColor),
-                      ),
-                      width: 35.0,
-                      height: 35.0,
-                      padding:
-                          EdgeInsets.all(0.0),
-                    ),
-                    imageUrl: peerAvatar,
-                    width: 35.0,
-                    height: 35.0,
-                    fit: BoxFit.cover,
-                  ),
-                  borderRadius: BorderRadius.all(
-                    Radius.circular(18.0),
-                  ),
-                  clipBehavior: Clip.hardEdge,
-                ),
-                document.data()['type'] == 0
-                    ? Container(
-                        child: Text(
-                          document
-                              .data()['content'],
-                          style: TextStyle(
-                              color:
-                                  Colors.white),
-                        ),
-                        padding:
-                            EdgeInsets.fromLTRB(
-                                15.0,
-                                10.0,
-                                15.0,
-                                10.0),
-                        width: 200.0,
-                        decoration: BoxDecoration(
-                            color: primaryColor,
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                                        8.0)),
-                        margin: EdgeInsets.only(
-                            left: 10.0),
-                      )
-                    : document.data()['type'] == 1
-                        ? Container(
-                            child: FlatButton(
-                              child: Material(
-                                child:
-                                    CachedNetworkImage(
-                                  placeholder:
-                                      (context,
-                                              url) =>
-                                          Container(
+                                            6.0)),
+                            margin: EdgeInsets.only(
+                                bottom:
+                                    isLastMessageRight(
+                                            index)
+                                        ? 0.0
+                                        : 0.0,
+                                right: 5.0),
+                          ))
+                      : document.data()['type'] ==
+                              1
+                          // Image
+                          ? ChatBubble(
+                              clipper: ChatBubbleClipper1(
+                                  type: BubbleType
+                                      .sendBubble,
+                                  radius: 5.0),
+                              alignment: Alignment
+                                  .topRight,
+                              margin:
+                                  EdgeInsets.only(
+                                      top: 12),
+                              backGroundColor:
+                                  HexColor.fromHex(
+                                      '#DCF8C6'),
+                              child: Container(
+                                child: FlatButton(
+                                  child: Material(
                                     child:
-                                        CircularProgressIndicator(
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(
-                                              themeColor),
-                                    ),
-                                    width: 200.0,
-                                    height: 200.0,
-                                    padding:
-                                        EdgeInsets
-                                            .all(
+                                        CachedNetworkImage(
+                                      placeholder:
+                                          (context,
+                                                  url) =>
+                                              Container(
+                                        child:
+                                            CircularProgressIndicator(
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(themeColor),
+                                        ),
+                                        width:
+                                            200.0,
+                                        height:
+                                            200.0,
+                                        padding:
+                                            EdgeInsets.all(
                                                 70.0),
-                                    decoration:
-                                        BoxDecoration(
-                                      color:
-                                          greyColor2,
-                                      borderRadius:
-                                          BorderRadius
-                                              .all(
-                                        Radius.circular(
-                                            8.0),
+                                        decoration:
+                                            BoxDecoration(
+                                          color:
+                                              greyColor2,
+                                          borderRadius:
+                                              BorderRadius.all(
+                                            Radius.circular(
+                                                8.0),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  errorWidget:
-                                      (context,
+                                      errorWidget: (context,
                                               url,
                                               error) =>
                                           Material(
-                                    child: Image
-                                        .asset(
-                                      'images/img_not_available.jpeg',
+                                        child: Image
+                                            .asset(
+                                          'images/img_not_available.jpeg',
+                                          width:
+                                              200.0,
+                                          height:
+                                              200.0,
+                                          fit: BoxFit
+                                              .cover,
+                                        ),
+                                        borderRadius:
+                                            BorderRadius
+                                                .all(
+                                          Radius.circular(
+                                              8.0),
+                                        ),
+                                        clipBehavior:
+                                            Clip.hardEdge,
+                                      ),
+                                      imageUrl: document
+                                              .data()[
+                                          'content'],
                                       width:
                                           200.0,
                                       height:
@@ -1128,92 +1591,768 @@ class ChatScreenState extends State<ChatScreen> {
                                           .cover,
                                     ),
                                     borderRadius:
-                                        BorderRadius
-                                            .all(
-                                      Radius
-                                          .circular(
-                                              8.0),
-                                    ),
+                                        BorderRadius.all(
+                                            Radius.circular(
+                                                5.0)),
                                     clipBehavior:
                                         Clip.hardEdge,
                                   ),
-                                  imageUrl: document
-                                          .data()[
-                                      'content'],
-                                  width: 200.0,
-                                  height: 200.0,
-                                  fit: BoxFit
-                                      .cover,
+                                  onPressed: () {
+                                    Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) =>
+                                                FullPhoto(url: document.data()['content'])));
+                                  },
+                                  padding:
+                                      EdgeInsets
+                                          .all(0),
                                 ),
-                                borderRadius: BorderRadius
-                                    .all(Radius
-                                        .circular(
-                                            8.0)),
-                                clipBehavior:
-                                    Clip.hardEdge,
+                                margin: EdgeInsets.only(
+                                    bottom: isLastMessageRight(
+                                            index)
+                                        ? 0.0
+                                        : 0.0,
+                                    right: 4.0,
+                                    top: 0.0,
+                                    left: 0.0),
+                              ))
+                          // Sticker
+                          : Container(
+                              child: Image.asset(
+                                'images/${document.data()['content']}.gif',
+                                width: 100.0,
+                                height: 100.0,
+                                fit: BoxFit.cover,
                               ),
-                              onPressed: () {
-                                Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) =>
-                                            FullPhoto(
-                                                url: document.data()['content'])));
-                              },
-                              padding:
-                                  EdgeInsets.all(
-                                      0),
+                              margin: EdgeInsets.only(
+                                  bottom:
+                                      isLastMessageRight(
+                                              index)
+                                          ? 20.0
+                                          : 10.0,
+                                  right: 10.0),
                             ),
+                ],
+                mainAxisAlignment:
+                    MainAxisAlignment.end,
+              ),
+            ]));
+      }
+    } else {
+      // Left (peer message)
+      FirebaseFirestore.instance
+          .collection('messages')
+          .doc(groupChatId)
+          .collection(groupChatId)
+          .doc(document
+              .data()['timestamp']
+              .toString())
+          .update(
+              {'isSent': true, 'isRead': true});
+
+      if (document.data()['deleteForId-' +
+              prefs.getString('id')] !=
+          null) {
+        return Container();
+      } else if (document
+              .data()['deleteForAll'] !=
+          null) {
+        return GestureDetector(
+            onTapDown: _storePosition,
+            onLongPress: () {
+              final RenderBox overlay =
+                  Overlay.of(context)
+                      .context
+                      .findRenderObject();
+              showMenu(
+                  items: <PopupMenuEntry>[
+                    PopupMenuItem(
+                        value: 0,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(
+                                context);
+                            showDialog(
+                              context: context,
+                              builder: (_) =>
+                                  AlertDialog(
+                                title: Text(
+                                    'Delete message?'),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed:
+                                        () {
+                                      Navigator.pop(
+                                          context);
+                                      FirebaseFirestore
+                                          .instance
+                                          .collection(
+                                              'messages')
+                                          .doc(
+                                              groupChatId)
+                                          .collection(
+                                              groupChatId)
+                                          .doc(document
+                                              .data()['timestamp']
+                                              .toString())
+                                          .update({
+                                        'deleteForId-' +
+                                                prefs.getString('id'):
+                                            true,
+                                      });
+                                    },
+                                    child: const Text(
+                                        'DELETE FOR ME'),
+                                  ),
+                                  TextButton(
+                                    onPressed:
+                                        () async {
+                                      Navigator.pop(
+                                          context);
+                                    },
+                                    child: const Text(
+                                        'CANCEL',
+                                        style: TextStyle(
+                                            color:
+                                                Colors.black)),
+                                  )
+                                ],
+                              ),
+                            );
+                          },
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.delete,
+                                  color: Colors
+                                      .black),
+                              Text("Delete",
+                                  style: TextStyle(
+                                      color: Colors
+                                          .black)),
+                            ],
+                          ),
+                        )),
+                  ],
+                  context: context,
+                  position: RelativeRect.fromRect(
+                      _tapPosition &
+                          const Size(40,
+                              40), // smaller rect, the touch area
+                      Offset.zero &
+                          overlay
+                              .size // Bigger rect, the entire screen
+                      ));
+            },
+            child: Container(
+                child: Column(children: <Widget>[
+              Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.end,
+                  mainAxisAlignment:
+                      MainAxisAlignment.start,
+                  children: <Widget>[
+                    Container(
+                      child: Material(
+                        child: CachedNetworkImage(
+                          placeholder:
+                              (context, url) =>
+                                  Container(
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 1.0,
+                              valueColor:
+                                  AlwaysStoppedAnimation<
+                                          Color>(
+                                      themeColor),
+                            ),
+                            width: 35.0,
+                            height: 35.0,
+                            padding:
+                                EdgeInsets.all(
+                                    0.0),
                             margin:
                                 EdgeInsets.only(
-                                    left: 10.0),
-                          )
-                        : Container(
-                            child: Image.asset(
-                              'images/${document.data()['content']}.gif',
-                              width: 100.0,
-                              height: 100.0,
-                              fit: BoxFit.cover,
-                            ),
-                            margin: EdgeInsets.only(
-                                bottom:
-                                    isLastMessageRight(
-                                            index)
-                                        ? 20.0
-                                        : 10.0,
-                                right: 10.0),
+                                    top: 6.0),
                           ),
-              ],
-            ),
-
-            // Time
-            isLastMessageLeft(index)
-                ? Container(
-                    child: Text(
-                      DateFormat('dd MMM kk:mm')
-                          .format(DateTime
-                              .fromMillisecondsSinceEpoch(
-                                  int.parse(document
-                                          .data()[
-                                      'timestamp']))),
-                      style: TextStyle(
-                          color: greyColor,
-                          fontSize: 12.0,
-                          fontStyle:
-                              FontStyle.italic),
+                          imageUrl: peerAvatar,
+                          width: 35.0,
+                          height: 35.0,
+                          fit: BoxFit.cover,
+                        ),
+                        borderRadius:
+                            BorderRadius.all(
+                          Radius.circular(18.0),
+                        ),
+                        clipBehavior:
+                            Clip.hardEdge,
+                      ),
+                      margin: EdgeInsets.only(
+                          top: 10.0),
                     ),
-                    margin: EdgeInsets.only(
-                        left: 50.0,
-                        top: 5.0,
-                        bottom: 5.0),
-                  )
-                : Container(),
-          ],
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-        ),
-        margin: EdgeInsets.only(bottom: 10.0),
-      );
+                    ChatBubble(
+                        clipper: ChatBubbleClipper1(
+                            type: BubbleType
+                                .receiverBubble,
+                            radius: 5.0),
+                        alignment:
+                            Alignment.topRight,
+                        margin: EdgeInsets.only(
+                            top: 12),
+                        backGroundColor:
+                            greyColor2,
+                        child: Container(
+                          child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
+                              mainAxisAlignment:
+                                  MainAxisAlignment
+                                      .start,
+                              children: [
+                                Row(children: <
+                                    Widget>[
+                                  Icon(
+                                      Icons
+                                          .do_disturb_outlined,
+                                      color: Colors
+                                          .grey
+                                          .shade600,
+                                      size: 15),
+                                  Text(
+                                      ' This message was deleted',
+                                      style: TextStyle(
+                                          color: Colors
+                                              .grey
+                                              .shade600,
+                                          fontStyle:
+                                              FontStyle.italic))
+                                ]),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment
+                                          .end,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment
+                                          .end,
+                                  mainAxisSize:
+                                      MainAxisSize
+                                          .min,
+                                  children: <
+                                      Widget>[
+                                    Container(
+                                      margin: EdgeInsets.only(
+                                          right:
+                                              0.0),
+                                      width:
+                                          200.0,
+                                      child: Row(
+                                        mainAxisSize:
+                                            MainAxisSize
+                                                .min,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment
+                                                .end,
+                                        children: <
+                                            Widget>[
+                                          Text(
+                                            msggTime
+                                                .toString(),
+                                            style:
+                                                TextStyle(
+                                              color:
+                                                  Colors.grey,
+                                              fontSize:
+                                                  12.0,
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            width:
+                                                4.0,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              ]),
+                          padding:
+                              EdgeInsets.fromLTRB(
+                                  0.0,
+                                  0.0,
+                                  0.0,
+                                  0.0),
+                          width: 200.0,
+                          decoration: BoxDecoration(
+                              color: greyColor2,
+                              borderRadius:
+                                  BorderRadius
+                                      .circular(
+                                          8.0)),
+                          margin: EdgeInsets.only(
+                              left: 5.0),
+                        ))
+                  ])
+            ])));
+      } else {
+        return GestureDetector(
+            onPanUpdate: (details) {
+              if (details.delta.dx != 0) {
+                _onSwipe(
+                    document.data()['idFrom'],
+                    document.data()['content']);
+              }
+            },
+            onTapDown: _storePosition,
+            onLongPress: () {
+              final RenderBox overlay =
+                  Overlay.of(context)
+                      .context
+                      .findRenderObject();
+              showMenu(
+                  items: <PopupMenuEntry>[
+                    PopupMenuItem(
+                        value: 0,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(
+                                context);
+                            _onSwipe(
+                                document.data()[
+                                    'idFrom'],
+                                document.data()[
+                                    'content']);
+                          },
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.reply,
+                                  color: Colors
+                                      .black),
+                              Text("Reply",
+                                  style: TextStyle(
+                                      color: Colors
+                                          .black)),
+                            ],
+                          ),
+                        )),
+                    document.data()['type'] == 0
+                        ? PopupMenuItem(
+                            value: 0,
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.pop(
+                                    context);
+                                FlutterClipboard.copy(
+                                        document.data()[
+                                            'content'])
+                                    .then(
+                                        (value) {
+                                  print('copied');
+                                  Fluttertoast
+                                      .showToast(
+                                          msg:
+                                              'Copied');
+                                });
+                              },
+                              child: Row(
+                                children: <
+                                    Widget>[
+                                  Icon(
+                                      Icons
+                                          .content_copy,
+                                      color: Colors
+                                          .black),
+                                  Text("Copy",
+                                      style: TextStyle(
+                                          color: Colors
+                                              .black)),
+                                ],
+                              ),
+                            ))
+                        : Container(),
+                    PopupMenuItem(
+                        value: 0,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(
+                                context);
+                            showDialog(
+                              context: context,
+                              builder: (_) =>
+                                  AlertDialog(
+                                title: Text(
+                                    'Delete message?'),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed:
+                                        () {
+                                      Navigator.pop(
+                                          context);
+                                      FirebaseFirestore
+                                          .instance
+                                          .collection(
+                                              'messages')
+                                          .doc(
+                                              groupChatId)
+                                          .collection(
+                                              groupChatId)
+                                          .doc(document
+                                              .data()['timestamp']
+                                              .toString())
+                                          .update({
+                                        'deleteForId-' +
+                                                prefs.getString('id'):
+                                            true,
+                                      });
+                                    },
+                                    child: const Text(
+                                        'DELETE FOR ME'),
+                                  ),
+                                  TextButton(
+                                    onPressed:
+                                        () async {
+                                      Navigator.pop(
+                                          context);
+                                    },
+                                    child: const Text(
+                                        'CANCEL'),
+                                  )
+                                ],
+                              ),
+                            );
+                          },
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.delete,
+                                  color: Colors
+                                      .black),
+                              Text("Delete",
+                                  style: TextStyle(
+                                      color: Colors
+                                          .black)),
+                            ],
+                          ),
+                        )),
+                  ],
+                  context: context,
+                  position: RelativeRect.fromRect(
+                      _tapPosition &
+                          const Size(40,
+                              40), // smaller rect, the touch area
+                      Offset.zero &
+                          overlay
+                              .size // Bigger rect, the entire screen
+                      ));
+            },
+            onTap: () {
+              _onTap(document.data()['idFrom'],
+                  document.data()['content']);
+            },
+            child: Container(
+              child: Column(
+                children: <Widget>[
+                  Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.end,
+                    mainAxisAlignment:
+                        MainAxisAlignment.start,
+                    children: <Widget>[
+                      Container(
+                        child: Material(
+                          child:
+                              CachedNetworkImage(
+                            placeholder:
+                                (context, url) =>
+                                    Container(
+                              child:
+                                  CircularProgressIndicator(
+                                strokeWidth: 1.0,
+                                valueColor:
+                                    AlwaysStoppedAnimation<
+                                            Color>(
+                                        themeColor),
+                              ),
+                              width: 35.0,
+                              height: 35.0,
+                              padding:
+                                  EdgeInsets.all(
+                                      0.0),
+                              margin:
+                                  EdgeInsets.only(
+                                      top: 6.0),
+                            ),
+                            imageUrl: peerAvatar,
+                            width: 35.0,
+                            height: 35.0,
+                            fit: BoxFit.cover,
+                          ),
+                          borderRadius:
+                              BorderRadius.all(
+                            Radius.circular(18.0),
+                          ),
+                          clipBehavior:
+                              Clip.hardEdge,
+                        ),
+                        margin: EdgeInsets.only(
+                            top: 10.0),
+                      ),
+                      document.data()['type'] == 0
+                          ? ChatBubble(
+                              clipper: ChatBubbleClipper1(
+                                  type: BubbleType
+                                      .receiverBubble,
+                                  radius: 5.0),
+                              alignment: Alignment
+                                  .topRight,
+                              margin:
+                                  EdgeInsets
+                                      .only(
+                                          top:
+                                              12),
+                              backGroundColor:
+                                  greyColor2,
+                              child: Container(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment
+                                            .start,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment
+                                            .start,
+                                    children: [
+                                      document.data()['isReplyingMsg'] !=
+                                              null
+                                          ? ReplyMessageWidget(
+                                              message:
+                                                  messag)
+                                          : Container(),
+                                      document.data()['isReplyingMsg'] !=
+                                              null
+                                          ? SizedBox(
+                                              height:
+                                                  10)
+                                          : Container(),
+                                      Text(
+                                        document.data()[
+                                            'content'],
+                                        style: TextStyle(
+                                            color:
+                                                Colors.black),
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment
+                                                .end,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment
+                                                .end,
+                                        mainAxisSize:
+                                            MainAxisSize
+                                                .min,
+                                        children: <
+                                            Widget>[
+                                          Container(
+                                            margin:
+                                                EdgeInsets.only(right: 0.0),
+                                            width:
+                                                200.0,
+                                            child:
+                                                Row(
+                                              mainAxisSize:
+                                                  MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.end,
+                                              children: <Widget>[
+                                                Text(
+                                                  msggTime.toString(),
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12.0,
+                                                  ),
+                                                ),
+                                                SizedBox(
+                                                  width: 4.0,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    ]),
+                                padding:
+                                    EdgeInsets
+                                        .fromLTRB(
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            0.0),
+                                width: 200.0,
+                                decoration: BoxDecoration(
+                                    color:
+                                        greyColor2,
+                                    borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                                8.0)),
+                                margin: EdgeInsets
+                                    .only(
+                                        left:
+                                            5.0),
+                              ))
+                          : document
+                                          .data()[
+                                      'type'] ==
+                                  1
+                              ? ChatBubble(
+                                  clipper: ChatBubbleClipper1(
+                                      type: BubbleType
+                                          .receiverBubble,
+                                      radius:
+                                          5.0),
+                                  alignment:
+                                      Alignment
+                                          .topRight,
+                                  margin: EdgeInsets
+                                      .only(
+                                          top:
+                                              12),
+                                  backGroundColor:
+                                      greyColor2,
+                                  child:
+                                      Container(
+                                    child:
+                                        FlatButton(
+                                      child:
+                                          Material(
+                                        child:
+                                            CachedNetworkImage(
+                                          placeholder:
+                                              (context, url) =>
+                                                  Container(
+                                            child:
+                                                CircularProgressIndicator(
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(themeColor),
+                                            ),
+                                            width:
+                                                200.0,
+                                            height:
+                                                200.0,
+                                            padding:
+                                                EdgeInsets.all(70.0),
+                                            decoration:
+                                                BoxDecoration(
+                                              color:
+                                                  greyColor2,
+                                              borderRadius:
+                                                  BorderRadius.all(
+                                                Radius.circular(8.0),
+                                              ),
+                                            ),
+                                          ),
+                                          errorWidget: (context,
+                                                  url,
+                                                  error) =>
+                                              Material(
+                                            child:
+                                                Image.asset(
+                                              'images/img_not_available.jpeg',
+                                              width:
+                                                  200.0,
+                                              height:
+                                                  200.0,
+                                              fit:
+                                                  BoxFit.cover,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.all(
+                                              Radius.circular(8.0),
+                                            ),
+                                            clipBehavior:
+                                                Clip.hardEdge,
+                                          ),
+                                          imageUrl:
+                                              document.data()['content'],
+                                          width:
+                                              200.0,
+                                          height:
+                                              200.0,
+                                          fit: BoxFit
+                                              .cover,
+                                        ),
+                                        borderRadius:
+                                            BorderRadius.all(
+                                                Radius.circular(5.0)),
+                                        clipBehavior:
+                                            Clip.hardEdge,
+                                      ),
+                                      onPressed:
+                                          () {
+                                        Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                                builder: (context) => FullPhoto(url: document.data()['content'])));
+                                      },
+                                      padding:
+                                          EdgeInsets
+                                              .all(0),
+                                    ),
+                                    margin: EdgeInsets
+                                        .only(
+                                            left:
+                                                6.0),
+                                  ))
+                              : Container(
+                                  child:
+                                      Image.asset(
+                                    'images/${document.data()['content']}.gif',
+                                    width: 100.0,
+                                    height: 100.0,
+                                    fit: BoxFit
+                                        .cover,
+                                  ),
+                                  margin: EdgeInsets.only(
+                                      bottom: isLastMessageRight(
+                                              index)
+                                          ? 20.0
+                                          : 10.0,
+                                      right:
+                                          10.0),
+                                ),
+                    ],
+                  ),
+
+                  // Time
+                  isLastMessageLeft(index)
+                      ? Container(
+                          child: Text(
+                            DateFormat(
+                                    'dd MMM kk:mm')
+                                .format(DateTime.fromMillisecondsSinceEpoch(
+                                    int.parse(document
+                                            .data()[
+                                        'timestamp']))),
+                            style: TextStyle(
+                                color: greyColor,
+                                fontSize: 12.0,
+                                fontStyle:
+                                    FontStyle
+                                        .italic),
+                          ),
+                          margin: EdgeInsets.only(
+                              left: 50.0,
+                              top: 5.0,
+                              bottom: 0.0),
+                        )
+                      : Container(),
+                ],
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+              ),
+              margin:
+                  EdgeInsets.only(bottom: 10.0),
+            ));
+      }
     }
   }
 
@@ -1449,97 +2588,129 @@ class ChatScreenState extends State<ChatScreen> {
         .update({'typingStatus': typObject});
   }
 
+  Widget _getIcon(
+      bool isMessageSent, bool isMessageRead) {
+    if (!isMessageSent) {
+      return Icon(
+        Icons.check,
+        size: 18.0,
+        color: Colors.grey,
+      );
+    }
+    return Icon(
+      Icons.done_all,
+      size: 18.0,
+      color: isMessageRead
+          ? Colors.blue
+          : Colors.grey,
+    );
+  }
+
   Widget buildInput() {
     typingStatusSave();
-    return Container(
-      child: Row(
-        children: <Widget>[
-          // Button send image
-          Material(
-            child: Container(
-              margin: EdgeInsets.symmetric(
-                  horizontal: 1.0),
-              child: IconButton(
-                icon: Icon(Icons.image),
-                onPressed: getImage,
-                color: primaryColor,
-              ),
-            ),
-            color: Colors.white,
-          ),
-          Material(
-            child: Container(
-              margin: EdgeInsets.symmetric(
-                  horizontal: 1.0),
-              child: IconButton(
-                icon: Icon(Icons.face),
-                onPressed: getSticker,
-                color: primaryColor,
-              ),
-            ),
-            color: Colors.white,
-          ),
-
-          // Edit text
-          Flexible(
-            child: Container(
-              child: TextField(
-                onSubmitted: (value) {
-                  onSendMessage(
-                      textEditingController.text,
-                      0);
-                  setState(() {
-                    isComposing = false;
-                  });
-                },
-                onChanged: (String text) {
-                  setState(() {
-                    isComposing = text != null
-                        ? text.length > 0
-                        : false;
-                  });
-                },
-                style: TextStyle(
-                    color: primaryColor,
-                    fontSize: 15.0),
-                controller: textEditingController,
-                decoration:
-                    InputDecoration.collapsed(
-                  hintText:
-                      'Type your message...',
-                  hintStyle:
-                      TextStyle(color: greyColor),
+    var message = {
+      'message': replyMsg,
+      'username': replyingTo,
+    };
+    return Column(children: <Widget>[
+      isReplying
+          ? ReplyMessageWidget(
+              message: message,
+              onCancelReply: cancelReply)
+          : Text(''),
+      Container(
+        child: Row(
+          children: <Widget>[
+            // Button send image
+            Material(
+              child: Container(
+                margin: EdgeInsets.symmetric(
+                    horizontal: 1.0),
+                child: IconButton(
+                  icon: Icon(Icons.image),
+                  onPressed: getImage,
+                  color: primaryColor,
                 ),
-                focusNode: focusNode,
               ),
+              color: Colors.white,
             ),
-          ),
+            Material(
+              child: Container(
+                margin: EdgeInsets.symmetric(
+                    horizontal: 1.0),
+                child: IconButton(
+                  icon: Icon(Icons.face),
+                  onPressed: getSticker,
+                  color: primaryColor,
+                ),
+              ),
+              color: Colors.white,
+            ),
 
-          // Button send message
-          Material(
-            child: Container(
-              margin: EdgeInsets.symmetric(
-                  horizontal: 8.0),
-              child: IconButton(
-                icon: Icon(Icons.send),
-                onPressed: () => onSendMessage(
-                    textEditingController.text,
-                    0),
-                color: primaryColor,
+            // Edit text
+            Flexible(
+              child: Container(
+                child: TextField(
+                  onSubmitted: (value) {
+                    onSendMessage(
+                        textEditingController
+                            .text,
+                        0);
+                    setState(() {
+                      isComposing = false;
+                    });
+                  },
+                  onChanged: (String text) {
+                    setState(() {
+                      isComposing = text != null
+                          ? text.length > 0
+                          : false;
+                    });
+                  },
+                  style: TextStyle(
+                      color: primaryColor,
+                      fontSize: 15.0),
+                  controller:
+                      textEditingController,
+                  decoration:
+                      InputDecoration.collapsed(
+                    hintText:
+                        'Type your message...',
+                    hintStyle: TextStyle(
+                        color: greyColor),
+                  ),
+                  focusNode: focusNode,
+                ),
               ),
             ),
-            color: Colors.white,
-          ),
-        ],
-      ),
-      width: double.infinity,
-      height: 50.0,
-      decoration: BoxDecoration(
-          border: Border(
-              top: BorderSide(
-                  color: greyColor2, width: 0.5)),
-          color: Colors.white),
-    );
+
+            // Button send message
+            Material(
+              child: Container(
+                margin: EdgeInsets.symmetric(
+                    horizontal: 8.0),
+                child: IconButton(
+                  icon: Icon(Icons.send),
+                  onPressed: () => onSendMessage(
+                      textEditingController.text,
+                      0),
+                  color: primaryColor,
+                ),
+              ),
+              color: Colors.white,
+            ),
+          ],
+        ),
+        width: double.infinity,
+        height: 50.0,
+        decoration: BoxDecoration(
+            border: Border(
+                top: BorderSide(
+                    color: greyColor2,
+                    width: 0.5)),
+            color: Colors.white),
+      )
+    ]);
   }
 
   Widget buildListMessage() {
@@ -1600,4 +2771,24 @@ class Choice {
   final String title;
   final IconData icon;
   BuildContext context;
+}
+
+extension HexColor on Color {
+  /// String is in the format "aabbcc" or "ffaabbcc" with an optional leading "#".
+  static Color fromHex(String hexString) {
+    final buffer = StringBuffer();
+    if (hexString.length == 6 ||
+        hexString.length == 7) buffer.write('ff');
+    buffer.write(hexString.replaceFirst('#', ''));
+    return Color(
+        int.parse(buffer.toString(), radix: 16));
+  }
+
+  /// Prefixes a hash sign if [leadingHashSign] is set to `true` (default is `true`).
+  String toHex({bool leadingHashSign = true}) =>
+      '${leadingHashSign ? '#' : ''}'
+      '${alpha.toRadixString(16).padLeft(2, '0')}'
+      '${red.toRadixString(16).padLeft(2, '0')}'
+      '${green.toRadixString(16).padLeft(2, '0')}'
+      '${blue.toRadixString(16).padLeft(2, '0')}';
 }

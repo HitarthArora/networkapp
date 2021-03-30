@@ -218,6 +218,35 @@ class _DetailStatusScreenState
                       ),
                     )
                     */
+                    /*
+                      Container(
+                  margin:
+                      EdgeInsets.only(left: 10.0),
+                  child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      children: <Widget>[
+                        Text(name.toString(),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight:
+                                  FontWeight.w700,
+                            )),
+                        Text(
+                            dTimeLabel != null
+                                ? dTimeLabel
+                                    .toString()
+                                : '',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight:
+                                  FontWeight.w500,
+                            ))
+                      ])),
+                      */
                   ]),
                 ),
               ),

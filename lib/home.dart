@@ -894,6 +894,13 @@ class HomeScreenState extends State<HomeScreen>
         _showMessagingNotification(
             message['data']['body'],
             message['data']);
+        FirebaseFirestore.instance
+          .collection('messages')
+          .doc(message['data']['groupChatId'])
+          .collection(message['data']['groupChatId'])
+          .doc(message['data']['docId'])
+          .update(
+              {'isSent': true});
       } else {
         Platform.isAndroid
             ? showNotification(
