@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:mapbox_gl/mapbox_gl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geoflutterfire/geoflutterfire.dart';
@@ -184,64 +185,57 @@ class FullMapState extends State<FullMap> {
   Widget build(BuildContext context) {
     return new Scaffold(
         body: MapboxMap(
-            accessToken: MapsDemo.ACCESS_TOKEN,
-            onMapCreated: _onMapCreated,
-            initialCameraPosition:
-                const CameraPosition(
-                    target: LatLng(
-                        24.6424302, 77.3052066)),
-            onStyleLoadedCallback:
-                onStyleLoadedCallback,
-            onMapClick: (point, latLng) async {
-              var data = userList.where((user) =>
-                  ((user["latitude"] -
-                              latLng.latitude)
-                          .abs() <=
-                      0.00005));
-              if (data.length >= 1) {
-                var dataLong = userList.where(
-                    (user) => ((user[
-                                    "longitude"] -
-                                latLng.longitude)
-                            .abs() <=
-                        0.00005));
-                if (dataLong.length >= 1) {
-                  var dataList =
-                      dataLong.toList();
-                  double min = 1000000.0;
-                  var finalData;
-                  print(dataList);
-                  for (var i = 0;
-                      i < dataList.length;
-                      i++) {
-                    if (min >
-                        ((dataList[i]
-                                    ["latitude"] -
-                                latLng.latitude)
-                            .abs())) {
-                      min = ((dataList[i]
-                                  ["latitude"] -
-                              latLng.latitude)
-                          .abs());
-                      finalData = dataList[i];
-                    }
-                  }
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) =>
-                              UserProfile(
-                                  data: finalData !=
-                                          null
-                                      ? finalData
-                                      : dataLong
-                                              .toList()[
-                                          0],
-                                  currentUserId:
-                                      userId)));
-                }
+      accessToken: MapsDemo.ACCESS_TOKEN,
+      onMapCreated: _onMapCreated,
+      initialCameraPosition: const CameraPosition(
+          target: LatLng(24.6424302, 77.3052066)),
+      onStyleLoadedCallback:
+          onStyleLoadedCallback,
+      onMapClick: (point, latLng) async {
+        var data = userList.where((user) =>
+            ((user["latitude"] - latLng.latitude)
+                    .abs() <=
+                0.00005));
+        if (data.length >= 1) {
+          var dataLong = userList.where((user) =>
+              ((user["longitude"] -
+                          latLng.longitude)
+                      .abs() <=
+                  0.00005));
+          if (dataLong.length >= 1) {
+            var dataList = dataLong.toList();
+            double min = 1000000.0;
+            var finalData;
+            print(dataList);
+            for (var i = 0;
+                i < dataList.length;
+                i++) {
+              if (min >
+                  ((dataList[i]["latitude"] -
+                          latLng.latitude)
+                      .abs())) {
+                min = ((dataList[i]["latitude"] -
+                        latLng.latitude)
+                    .abs());
+                finalData = dataList[i];
               }
-            }));
+            }
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) =>
+                        UserProfile(
+                            data: finalData !=
+                                    null
+                                ? finalData
+                                : dataLong
+                                    .toList()[0],
+                            currentUserId:
+                                userId)));
+          }
+        }
+      },
+    ));
   }
 
   void onStyleLoadedCallback() {}

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -637,7 +638,39 @@ class HomeScreenState extends State<HomeScreen>
             ));
   }
 
+  bool showAd = false;
+
   checkForBackgroundCalls() async {
+    if (adLocationList != null && showAd) {
+      for (var i = 0;
+          i < adLocationList.length;
+          i++) {
+        if ((adLocationList[i]['latitude'] - pos.latitude).abs() <= 0.005) {
+          if ((adLocationList[i]['longitude'] - pos.longitude).abs() <= 0.005) {
+            await showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: Text(
+                    adLocationList[i]['adTitle']),
+                content: Text(adLocationList[i]
+                    ['adContent']),
+                actions: <Widget>[
+                  FlatButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showAd = false;
+                    },
+                    child: const Text('Close Ad'),
+                  ),
+                ],
+              ),
+            );
+            showAd=false;
+          }
+        }
+      }
+    }
+    
     await FirebaseFirestore.instance
         .collection('users')
         .doc(currentUserId)
@@ -895,12 +928,12 @@ class HomeScreenState extends State<HomeScreen>
             message['data']['body'],
             message['data']);
         FirebaseFirestore.instance
-          .collection('messages')
-          .doc(message['data']['groupChatId'])
-          .collection(message['data']['groupChatId'])
-          .doc(message['data']['docId'])
-          .update(
-              {'isSent': true});
+            .collection('messages')
+            .doc(message['data']['groupChatId'])
+            .collection(
+                message['data']['groupChatId'])
+            .doc(message['data']['docId'])
+            .update({'isSent': true});
       } else {
         Platform.isAndroid
             ? showNotification(
@@ -1593,6 +1626,40 @@ class HomeScreenState extends State<HomeScreen>
         data = json.decode(value);
       });
     });
+
+    /*
+    if (adLocationList != null) {
+      for (var i = 0;
+          i < adLocationList.length;
+          i++) {
+        if ((24-
+                24).abs() <=
+            0.005) {
+          if ((24- 
+                  24).abs() <=
+              0.005) {
+            showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: Text(
+                    adLocationList[i]['adTitle']),
+                content: Text(adLocationList[i]
+                    ['adContent']),
+                actions: <Widget>[
+                  FlatButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Close Ad'),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+      }
+    }
+    */
 
     return Scaffold(
         appBar: AppBar(
