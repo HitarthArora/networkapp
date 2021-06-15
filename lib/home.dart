@@ -645,8 +645,14 @@ class HomeScreenState extends State<HomeScreen>
       for (var i = 0;
           i < adLocationList.length;
           i++) {
-        if ((adLocationList[i]['latitude'] - pos.latitude).abs() <= 0.005) {
-          if ((adLocationList[i]['longitude'] - pos.longitude).abs() <= 0.005) {
+        if ((adLocationList[i]['latitude'] -
+                    pos.latitude)
+                .abs() <=
+            0.005) {
+          if ((adLocationList[i]['longitude'] -
+                      pos.longitude)
+                  .abs() <=
+              0.005) {
             await showDialog(
               context: context,
               builder: (_) => AlertDialog(
@@ -665,12 +671,12 @@ class HomeScreenState extends State<HomeScreen>
                 ],
               ),
             );
-            showAd=false;
+            showAd = false;
           }
         }
       }
     }
-    
+
     await FirebaseFirestore.instance
         .collection('users')
         .doc(currentUserId)
@@ -1336,13 +1342,13 @@ class HomeScreenState extends State<HomeScreen>
   }
 
   void readLocal() async {
+    pos = await Geolocator().getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
     prefs = await SharedPreferences.getInstance();
     radius = prefs.getInt('radius') ?? radius;
     email = prefs.getString('email') ?? email;
     currentUserId =
         prefs.getString('id') ?? currentUserId;
-    pos = await Geolocator().getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
     username = prefs.getString('nickname');
 
     FirebaseFirestore.instance
@@ -1609,9 +1615,16 @@ class HomeScreenState extends State<HomeScreen>
     readLocal();
 
     GeoFirePoint center = geo.point(
-        latitude: pos != null ? pos.latitude : 34,
-        longitude:
-            pos != null ? pos.longitude : 34);
+        latitude: pos != null
+            ? pos.latitude
+            : position != null
+                ? position.latitude
+                : 17.38,
+        longitude: pos != null
+            ? pos.longitude
+            : position != null
+                ? position.longitude
+                : 78.48);
 
     var collectionReference =
         _firestore.collection('users');

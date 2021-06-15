@@ -14,6 +14,8 @@ Messaging the registered users with enabled messaging notifications showing the 
 
 Useful chat features like viewing online or offline status of the users, checking the last seen of users, having date based grouping bubbles of the chat sections on the Chat screen
 
+The features of deleting a message, read receipts on the chat screen and long pressing on the message to get various options like Delete, Copy and Reply.
+
 Voice calling and video calling the registered nearby users with incoming call notifications
 
 The incoming voice and video call screens having the options to send the standard messages to the calling user in case the user is not able to pick the call

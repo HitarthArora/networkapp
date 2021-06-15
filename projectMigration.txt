@@ -1,0 +1,15 @@
+1. 
+Create a firebase project and add firebase to the mobile app with the SHA fingerprint.
+
+2.
+Refer the following doc for creation and adding firebase to mobile application.
+https://firebase.google.com/docs/android/setup
+
+3. 
+Reference doc of how to create SHA fingerprint:
+https://developers.google.com/android/guides/client-auth
+
+4. 
+After the firebase app is created, download google-services.json and place it on the path /android/app
+
+

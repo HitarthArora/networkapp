@@ -47,6 +47,11 @@ class LoginScreenState
       isLoading = true;
     });
 
+    Position position = await Geolocator()
+        .getCurrentPosition(
+            desiredAccuracy:
+                LocationAccuracy.high);
+
     prefs = await SharedPreferences.getInstance();
 
     isLoggedIn = await googleSignIn.isSignedIn();
@@ -56,7 +61,8 @@ class LoginScreenState
         MaterialPageRoute(
             builder: (context) => HomeScreen(
                 currentUserId:
-                    prefs.getString('id'))),
+                    prefs.getString('id'),
+                position: position)),
       );
     }
 
@@ -138,8 +144,7 @@ class LoginScreenState
             'nickname', currentUser.displayName);
         await prefs.setString(
             'photoUrl', currentUser.photoURL);
-        await prefs.setInt(
-            'radius', 10);
+        await prefs.setInt('radius', 10);
         await prefs.setString(
             'email', currentUser.email);
       } else {

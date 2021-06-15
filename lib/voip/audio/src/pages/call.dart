@@ -290,6 +290,7 @@ class _CallPageState
                       Radius.circular(35.0)),
                   clipBehavior: Clip.hardEdge,
                 ),
+                /*
                 noOfUsersjoined == 1
                     ? Text('')
                     : StreamBuilder<int>(
@@ -301,6 +302,7 @@ class _CallPageState
                         StopWatchTimer.getDisplayTime(value, hours: _isHours);
                     return Column(
                       children: <Widget>[
+                        /*
                         Padding(
                           padding: const EdgeInsets.all(8),
                           child: Text(
@@ -311,6 +313,8 @@ class _CallPageState
                                 fontWeight: FontWeight.bold),
                           ),
                         ),
+                        */
+                        /*
                         Padding(
                           padding: const EdgeInsets.all(8),
                           child: Text(
@@ -321,10 +325,11 @@ class _CallPageState
                                 fontWeight: FontWeight.w400),
                           ),
                         ),
+                        */
                       ],
                     );
                   },
-                ),
+                ),*/
               ]),
             ),
           ],
