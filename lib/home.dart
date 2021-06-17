@@ -1035,7 +1035,8 @@ class HomeScreenState extends State<HomeScreen>
       Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (context) => MapsDemo()));
+              builder: (context) =>
+                  MapsDemo(position: pos)));
     }
   }
 

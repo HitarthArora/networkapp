@@ -13,21 +13,26 @@ import 'page.dart';
 import 'dart:math' show cos, sqrt, asin;
 
 class FullMapPage extends ExamplePage {
-  FullMapPage()
+  final position;
+  FullMapPage({Key key, this.position})
       : super(const Icon(Icons.map),
             'Full Screen Map');
 
   @override
   Widget build(BuildContext context) {
-    return const FullMap();
+    return FullMap(position: position);
   }
 }
 
 class FullMap extends StatefulWidget {
-  const FullMap();
-
+  final position;
+  FullMap({
+    Key key,
+    this.position,
+  });
   @override
-  State createState() => FullMapState();
+  State createState() =>
+      FullMapState(pos: position);
 }
 
 class FullMapState extends State<FullMap> {
@@ -37,6 +42,12 @@ class FullMapState extends State<FullMap> {
   var radius;
   String userId;
   List<Map<String, dynamic>> userList = [];
+  final pos;
+
+  FullMapState({
+    Key key,
+    this.pos,
+  });
 
   Future<void> addImageFromUrl(
       String name, Uri uri) async {
@@ -187,8 +198,11 @@ class FullMapState extends State<FullMap> {
         body: MapboxMap(
       accessToken: MapsDemo.ACCESS_TOKEN,
       onMapCreated: _onMapCreated,
-      initialCameraPosition: const CameraPosition(
-          target: LatLng(24.6424302, 77.3052066)),
+      initialCameraPosition: CameraPosition(
+          target: LatLng(
+              pos != null ? pos.latitude : 0,
+              pos != null ? pos.longitude : 0),
+          zoom: pos != null ? 14.476 : 0),
       onStyleLoadedCallback:
           onStyleLoadedCallback,
       onMapClick: (point, latLng) async {

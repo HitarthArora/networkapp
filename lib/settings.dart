@@ -337,7 +337,7 @@ class SettingsScreenState
                       child: TextField(
                         decoration:
                             InputDecoration(
-                          hintText: 'Sweetie',
+                          hintText: 'Name',
                           contentPadding:
                               EdgeInsets.all(5.0),
                           hintStyle: TextStyle(
@@ -535,9 +535,9 @@ class SettingsScreenState
                 margin: EdgeInsets.only(top:10),
                 child: Container(
                   child: Icon(
-                    icon,
+                    Icons.emoji_flags_rounded,
                     color: Colors.red,
-                    size: 38,
+                    size: 53,
                   ),
                 ),
               )
