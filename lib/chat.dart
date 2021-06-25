@@ -2651,6 +2651,9 @@ class ChatScreenState extends State<ChatScreen> {
             Flexible(
               child: Container(
                 child: TextField(
+                  keyboardType:
+                      TextInputType.multiline,
+                  maxLines: null,
                   onSubmitted: (value) {
                     onSendMessage(
                         textEditingController
