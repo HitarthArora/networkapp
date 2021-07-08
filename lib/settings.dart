@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:networkapp/const.dart';
+import 'package:networkapp/widget/slider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +75,12 @@ class SettingsScreenState
   void initState() {
     super.initState();
     readLocal();
+  }
+
+  void refresh(dynamic rad) {
+    setState(() {
+      radius = rad;
+    });
   }
 
   void readLocal() async {
@@ -419,7 +426,15 @@ class SettingsScreenState
                       padding: EdgeInsets.only(
                           bottom: 5.0)),
                   Container(
-                    child: Theme(
+                    child: CustomSlider(
+                        minn: 0,
+                        maxx: 10,
+                        radius: radius,
+                        notifyParent: refresh,
+                        slidIcon: Icons
+                            .emoji_flags_rounded),
+                    /*
+                    Theme(
                         data: Theme.of(context)
                             .copyWith(
                                 primaryColor:
@@ -462,6 +477,7 @@ class SettingsScreenState
                             },
                           )
                         ])),
+                        */
                     margin: EdgeInsets.only(
                         left: 15.0,
                         right: 15.0,
@@ -532,7 +548,7 @@ class SettingsScreenState
                 height: 4,
                 padding: const EdgeInsets.only(
                     bottom: 60.0),
-                margin: EdgeInsets.only(top:10),
+                margin: EdgeInsets.only(top: 10),
                 child: Container(
                   child: Icon(
                     Icons.emoji_flags_rounded,
