@@ -432,7 +432,13 @@ class SettingsScreenState
                         radius: radius,
                         notifyParent: refresh,
                         slidIcon: Icons
-                            .emoji_flags_rounded),
+                            .emoji_flags_rounded,
+                        slidIcon2:
+                            Icons.add_outlined,
+                        color: Colors.red,
+                        sliderThemeColor:
+                            primaryColor,
+                        isRangeSlider: false),
                     /*
                     Theme(
                         data: Theme.of(context)

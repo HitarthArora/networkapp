@@ -11,14 +11,22 @@ class CustomSlider extends StatefulWidget {
   var maxx;
   var minn;
   var slidIcon;
+  var slidIcon2;
+  var color;
+  var sliderThemeColor;
   final Function notifyParent;
+  bool isRangeSlider;
   CustomSlider(
       {Key key,
       this.radius,
       this.maxx,
       this.minn,
       this.notifyParent,
-      this.slidIcon})
+      this.slidIcon,
+      this.slidIcon2,
+      this.color,
+      this.sliderThemeColor,
+      this.isRangeSlider})
       : super(key: key);
   @override
   State createState() => CustomSliderState(
@@ -26,25 +34,38 @@ class CustomSlider extends StatefulWidget {
       maxx: maxx,
       minn: minn,
       notifyParent: notifyParent,
-      slidIcon: slidIcon);
+      slidIcon: slidIcon,
+      slidIcon2: slidIcon2,
+      color: color,
+      sliderThemeColor: sliderThemeColor,
+      isRangeSlider: isRangeSlider);
 }
 
 class CustomSliderState
     extends State<CustomSlider> {
   double lowerVal = 0;
+  double upperVal = 10;
   var radius;
   final Function notifyParent;
   var maxx;
   var minn;
   var slidIcon;
+  var slidIcon2;
+  var color;
+  var sliderThemeColor;
   SharedPreferences prefs;
+  bool isRangeSlider;
   CustomSliderState(
       {Key key,
       this.radius,
       this.maxx,
       this.minn,
       this.notifyParent,
-      this.slidIcon});
+      this.slidIcon,
+      this.slidIcon2,
+      this.color,
+      this.sliderThemeColor,
+      this.isRangeSlider});
 
   @override
   void initState() {
@@ -61,27 +82,67 @@ class CustomSliderState
     return Container(
       child: Theme(
           data: Theme.of(context).copyWith(
-              primaryColor: primaryColor),
+              primaryColor: sliderThemeColor),
           child: Column(children: <Widget>[
             FlutterSlider(
-              values: [lowerVal],
+              values: isRangeSlider != null
+                  ? isRangeSlider
+                      ? [lowerVal, upperVal]
+                      : [lowerVal]
+                  : [lowerVal],
               max: maxx.toDouble(),
               min: minn.toDouble(),
+              rangeSlider: isRangeSlider,
               tooltip: FlutterSliderTooltip(
+                /*
                 leftPrefix: Icon(
                   Icons.attach_money,
                   size: 19,
                   color: Colors.black45,
                 ),
-                rightSuffix: Text(" kms"),
+                */
+                leftSuffix: Text(" kms"),
                 textStyle: TextStyle(
                     fontSize: 17,
                     color: Colors.black45),
               ),
-              handler: customHandler(slidIcon),
+              hatchMark: FlutterSliderHatchMark(
+                density:
+                    0.5, // means 50 lines, from 0 to 100 percent
+                labels: [
+                  FlutterSliderHatchMarkLabel(
+                      percent: 0,
+                      label:
+                          Text(minn.toString())),
+                  FlutterSliderHatchMarkLabel(
+                      percent: 100,
+                      label:
+                          Text(maxx.toString())),
+                ],
+              ),
+              handler:
+                  customHandler(slidIcon, color),
+              rightHandler:
+                  customHandler(slidIcon2, color),
+              trackBar: FlutterSliderTrackBar(
+                inactiveTrackBar: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(20),
+                  color: Colors.black12,
+                  border: Border.all(
+                      width: 3,
+                      color: Colors.blue),
+                ),
+                activeTrackBar: BoxDecoration(
+                    borderRadius:
+                        BorderRadius.circular(4),
+                    color: Colors.blue
+                        .withOpacity(0.5)),
+              ),
               onDragging: (handlerIndex,
                   lowerValue, upperValue) {
                 lowerVal = lowerValue;
+                upperVal = upperValue;
                 radius =
                     lowerValue.round().toInt();
                 prefs.setInt('radius', radius);
@@ -93,7 +154,7 @@ class CustomSliderState
     );
   }
 
-  customHandler(IconData icon) {
+  customHandler(IconData icon, var color) {
     return FlutterSliderHandler(
         decoration: BoxDecoration(),
         child: Column(
@@ -111,7 +172,7 @@ class CustomSliderState
                 child: Container(
                   child: Icon(
                     icon,
-                    color: Colors.red,
+                    color: color,
                     size: 53,
                   ),
                 ),
