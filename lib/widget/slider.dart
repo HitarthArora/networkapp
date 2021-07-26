@@ -104,11 +104,13 @@ class CustomSliderState
                 ),
                 */
                 leftSuffix: Text(" kms"),
+                rightSuffix: Text(" kms"),
                 textStyle: TextStyle(
                     fontSize: 17,
                     color: Colors.black45),
               ),
               hatchMark: FlutterSliderHatchMark(
+                labelsDistanceFromTrackBar: -21,
                 density:
                     0.5, // means 50 lines, from 0 to 100 percent
                 labels: [
@@ -133,12 +135,12 @@ class CustomSliderState
                   color: Colors.black12,
                   border: Border.all(
                       width: 3,
-                      color: Colors.blue),
+                      color: Colors.green),
                 ),
                 activeTrackBar: BoxDecoration(
                     borderRadius:
                         BorderRadius.circular(4),
-                    color: Colors.blue
+                    color: Colors.green
                         .withOpacity(0.5)),
               ),
               onDragging: (handlerIndex,

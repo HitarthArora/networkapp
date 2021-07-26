@@ -436,7 +436,7 @@ class SettingsScreenState
                         slidIcon: TablerIcons.triangle,
                         //Icons.emoji_flags_rounded,
                         slidIcon2:
-                            Icons.add_outlined,
+                            TablerIcons.triangle,
                         color: Colors.red,
                         sliderThemeColor:
                             primaryColor,
