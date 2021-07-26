@@ -174,8 +174,8 @@ class CustomSliderState
                 child: Container(
                   child: Icon(
                     icon,
-                    color: color,
-                    size: 53,
+                    color: Colors.green,
+                    size: 37,
                   ),
                 ),
               )

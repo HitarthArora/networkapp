@@ -11,6 +11,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_xlider/flutter_xlider.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_tabler_icons/flutter_tabler_icons.dart';
 
 class ChatSettings extends StatelessWidget {
   var x;
@@ -431,8 +433,8 @@ class SettingsScreenState
                         maxx: 10,
                         radius: radius,
                         notifyParent: refresh,
-                        slidIcon: Icons
-                            .emoji_flags_rounded,
+                        slidIcon: TablerIcons.triangle,
+                        //Icons.emoji_flags_rounded,
                         slidIcon2:
                             Icons.add_outlined,
                         color: Colors.red,
